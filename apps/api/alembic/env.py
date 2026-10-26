@@ -3,14 +3,16 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine
 
+import alvo.identity.infrastructure  # noqa: F401  (registers tables on the metadata)
 from alvo.shared.config import Settings
+from alvo.shared.orm import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# No business tables yet; modules will register their metadata here.
-target_metadata = None
+# Each module's persistence layer is imported above so its tables register on this metadata.
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:

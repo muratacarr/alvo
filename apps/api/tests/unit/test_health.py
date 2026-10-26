@@ -7,7 +7,9 @@ LEAKY_ERROR = "connection to server at db (10.0.0.5) failed: password authentica
 
 
 def client(settings_factory: SettingsFactory, ready: bool, environment: str = "test") -> TestClient:
-    app = create_app(settings_factory(environment=environment), readiness_probe=lambda: ready)
+    provider = "none" if environment == "production" else "mock"
+    settings = settings_factory(environment=environment, identity_provider=provider)
+    app = create_app(settings, readiness_probe=lambda: ready)
     return TestClient(app, raise_server_exceptions=False)
 
 

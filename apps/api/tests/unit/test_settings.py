@@ -16,6 +16,7 @@ def make(**overrides: str) -> Settings:
         "environment": "production",
         "database_url": STRONG_DB_URL,
         "session_secret": STRONG_SECRET,
+        "public_origin": "https://alvo.example.org",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)  # type: ignore[arg-type]
@@ -91,3 +92,32 @@ def test_reads_prefixed_environment_variables(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("ALVO_SESSION_SECRET", STRONG_SECRET)
     settings = Settings(_env_file=None)
     assert settings.environment == "development"
+
+
+def test_production_requires_an_https_public_origin() -> None:
+    with pytest.raises(ValidationError):
+        make(public_origin="http://alvo.example.org")
+
+
+def test_non_production_may_use_http_localhost() -> None:
+    assert make(environment="development", public_origin="http://localhost:8000")
+
+
+def test_mock_identity_provider_is_forbidden_in_production() -> None:
+    with pytest.raises(ValidationError):
+        make(identity_provider="mock")
+
+
+def test_mock_identity_provider_is_allowed_outside_production() -> None:
+    assert make(environment="development", identity_provider="mock")
+
+
+def test_identity_provider_defaults_to_none() -> None:
+    assert make().identity_provider == "none"
+
+
+def test_session_lifetimes_must_be_positive_and_ordered() -> None:
+    with pytest.raises(ValidationError):
+        make(session_idle_minutes="0")
+    with pytest.raises(ValidationError):
+        make(session_idle_minutes="600", session_absolute_minutes="60")

@@ -62,7 +62,9 @@ api_digest="$(extract api_digest "$digest_re")"
 web_digest="$(extract web_digest "$digest_re")"
 # Exactly one line for each field, a supported schema, and no other fields.
 [ "$(grep -c '"commit"' "$manifest" || true)" = 1 ] || fail "manifest must contain one commit" 2
-[ -n "$commit" ] && [ -n "$api_digest" ] && [ -n "$web_digest" ] || fail "manifest is malformed" 2
+if [ -z "$commit" ] || [ -z "$api_digest" ] || [ -z "$web_digest" ]; then
+  fail "manifest is malformed" 2
+fi
 grep -q '^ *"schema": 1,\{0,1\} *$' "$manifest" || fail "unsupported manifest schema" 2
 [ "$(grep -c '":' "$manifest" || true)" = 4 ] || fail "manifest has unexpected fields" 2
 

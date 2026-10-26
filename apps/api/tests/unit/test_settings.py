@@ -121,3 +121,19 @@ def test_session_lifetimes_must_be_positive_and_ordered() -> None:
         make(session_idle_minutes="0")
     with pytest.raises(ValidationError):
         make(session_idle_minutes="600", session_absolute_minutes="60")
+
+
+@pytest.mark.parametrize("fragment", ["XxX", "xxx", "ToDo", "todo"])
+def test_a_genuine_random_secret_is_not_mistaken_for_a_placeholder(fragment: str) -> None:
+    # Random secrets can contain short fragments by chance; only whole placeholders are rejected.
+    secret = "abcdefghijklmnopqrstuvwxyz" + fragment + "0123456789ABCDEF"  # not secret-like
+    assert make(session_secret=secret).session_secret.get_secret_value() == secret
+
+
+@pytest.mark.parametrize(
+    "placeholder",
+    ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "TODO", "todo", "password", "secret"],
+)
+def test_whole_value_placeholders_are_still_rejected(placeholder: str) -> None:
+    with pytest.raises(ValidationError):
+        make(session_secret=placeholder)

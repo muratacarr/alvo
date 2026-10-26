@@ -91,7 +91,13 @@ sudo /opt/alvo/ops/deploy/deploy.sh --rollback /var/lib/alvo-deploy/previous.jso
 ```
 
 ### First start on a new Pi
-Do the secrets and tunnel steps above first, then run the first release exactly as described. `docker compose -f compose.prod.yaml ps` should show every service healthy; `cloudflared` shows `unhealthy` while the tunnel is not connected.
+Do the secrets and tunnel steps above first. The very first deploy has no database to back up yet, so use the one-time `--first` option (the script refuses it once any release has been deployed):
+
+```
+sudo /opt/alvo/ops/deploy/deploy.sh --first /path/to/release-manifest.json
+```
+
+Then take the first backup right away (section 5) and run the restore drill. From the second deploy on, the script requires a backup younger than 8 hours. `docker compose -f compose.prod.yaml ps` should show every service healthy; `cloudflared` shows `unhealthy` while the tunnel is not connected.
 
 ## 5. Backups
 

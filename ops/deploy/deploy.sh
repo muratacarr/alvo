@@ -3,6 +3,8 @@
 #
 #   deploy.sh release-manifest.json              deploy a release
 #   deploy.sh --rollback previous.json           go back to an earlier release (no migrations)
+#   deploy.sh --first release-manifest.json      the very first deploy only: no database exists
+#                                                yet, so there can be no backup to require
 #
 # The manifest comes from the approved "Release" workflow run (artifact "release-manifest").
 # The script accepts only what that manifest names, and only if every check below passes:
@@ -27,9 +29,14 @@ set -euo pipefail
 umask 077
 
 rollback=no
-if [ "${1:-}" = "--rollback" ]; then
-  rollback=yes
+first=no
+while [ "${1:-}" = "--rollback" ] || [ "${1:-}" = "--first" ]; do
+  if [ "$1" = "--rollback" ]; then rollback=yes; else first=yes; fi
   shift
+done
+if [ "$rollback" = "yes" ] && [ "$first" = "yes" ]; then
+  echo "deploy refused: --first and --rollback cannot be combined" >&2
+  exit 2
 fi
 manifest="${1:?usage: deploy.sh [--rollback] <release-manifest.json>}"
 
@@ -87,7 +94,11 @@ for secret in db_password alvo_database_url alvo_session_secret tunnel_token; do
   [ -s "$secrets_dir/$secret" ] || fail "secret file missing or empty: $secret"
 done
 
-if [ "$rollback" = "no" ]; then
+if [ "$first" = "yes" ] && [ -e "$state_dir/current.json" ]; then
+  fail "a release was already deployed; --first is only for the very first deploy" 2
+fi
+
+if [ "$rollback" = "no" ] && [ "$first" = "no" ]; then
   [ -f "$backup_state/last-success" ] || fail "no backup has ever succeeded; run backup.sh first"
   last="$(cat "$backup_state/last-success")"
   case "$last" in ''|*[!0-9]*) fail "backup marker is corrupt" ;; *) ;; esac

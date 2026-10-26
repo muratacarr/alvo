@@ -67,3 +67,31 @@ def test_checkout_never_persists_credentials() -> None:
 def test_every_job_has_a_timeout() -> None:
     for name, job in load("ci.yml")["jobs"].items():
         assert "timeout-minutes" in job, name
+
+
+def ci_text() -> str:
+    return (WORKFLOWS / "ci.yml").read_text(encoding="utf-8")
+
+
+def test_ci_lints_dockerfile_and_scans_image_and_config() -> None:
+    text = ci_text()
+    assert "hadolint" in text
+    assert "trivy image" in text
+    assert "trivy config" in text
+
+
+def test_ci_builds_the_image_on_a_native_arm64_runner() -> None:
+    runners = [job["runs-on"] for job in load("ci.yml")["jobs"].values()]
+    assert "ubuntu-24.04-arm" in runners
+
+
+def test_ci_smoke_tests_the_compose_stack_and_checks_db_isolation() -> None:
+    text = ci_text()
+    assert "docker compose up" in text
+    assert "make_dev_secrets.py" in text
+    assert "/health/ready" in text
+
+
+def test_downloaded_tool_binaries_are_checksum_verified() -> None:
+    text = ci_text()
+    assert text.count("sha256sum -c") >= text.count("curl -sSfL")

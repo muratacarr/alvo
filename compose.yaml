@@ -1,0 +1,88 @@
+# DEVELOPMENT stack. Production uses a separate, reviewed file (slice 1F).
+# First run:  python apps/api/scripts/make_dev_secrets.py
+#             docker compose up --build -d
+#             docker compose run --rm api alembic upgrade head
+name: alvo
+
+services:
+  db:
+    image: postgres:18-trixie@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+    # The official image's data directory is owned by uid 999; running as that user
+    # means no root start-up and lets us drop every capability.
+    user: "999:999"
+    environment:
+      POSTGRES_USER: alvo_app
+      POSTGRES_DB: alvo
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    volumes:
+      - db-data:/var/lib/postgresql
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
+    networks:
+      - backend
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 200
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alvo_app -d alvo"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+    image: alvo-api:dev
+    user: "10001:10001"
+    environment:
+      ALVO_ENVIRONMENT: development
+    secrets:
+      - alvo_database_url
+      - alvo_session_secret
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    networks:
+      - backend
+      - edge
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 100
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  # No route to the outside world: the database can never be reached from or reach the internet.
+  backend:
+    internal: true
+  edge: {}
+
+volumes:
+  db-data: {}
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  alvo_database_url:
+    file: ./secrets/alvo_database_url
+  alvo_session_secret:
+    file: ./secrets/alvo_session_secret

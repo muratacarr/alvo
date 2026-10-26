@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     identity_provider: Literal["none", "mock"] = "none"
     session_idle_minutes: int = 30
     session_absolute_minutes: int = 720
+    # Admin changes require a sign-in no older than this (step-up authentication).
+    admin_recent_login_minutes: int = 15
+    # Global ceilings for per-user AI limits an admin may grant. Zero means "grant nothing";
+    # the owner raises them deliberately (see docs/security/api-spend-policy.md).
+    ai_max_requests_per_day: int = 0
+    ai_max_monthly_units: int = 0
 
     @field_validator("session_secret")
     @classmethod
@@ -83,6 +89,10 @@ class Settings(BaseSettings):
     def _validate_environment_rules(self) -> "Settings":
         if not 0 < self.session_idle_minutes <= self.session_absolute_minutes:
             raise ValueError("session lifetimes must satisfy 0 < idle <= absolute")
+        if self.admin_recent_login_minutes <= 0:
+            raise ValueError("admin_recent_login_minutes must be positive")
+        if self.ai_max_requests_per_day < 0 or self.ai_max_monthly_units < 0:
+            raise ValueError("AI caps must not be negative")
         if self.environment == "production":
             if not self.public_origin.startswith("https://"):
                 raise ValueError("public_origin must use https in production")

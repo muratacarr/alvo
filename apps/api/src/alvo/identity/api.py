@@ -1,6 +1,7 @@
 """HTTP transport for identity. Routes stay thin: validation, cookies, CSRF, status codes."""
 
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -53,23 +54,49 @@ def principal_dependency(
     return session.principal
 
 
-def build_router(settings: Settings, service: IdentityService) -> APIRouter:
-    def verify_origin(request: Request) -> None:
-        if request.method in _SAFE_METHODS:
-            return
-        if request.headers.get("origin") != settings.public_origin:
-            raise ApiError(403, "forbidden")
+def verify_origin(request: Request) -> None:
+    """Router-level guard: unsafe methods must come from the configured public origin."""
+    if request.method in _SAFE_METHODS:
+        return
+    settings: Settings = request.app.state.settings
+    if request.headers.get("origin") != settings.public_origin:
+        raise ApiError(403, "forbidden")
 
+
+def require_csrf(
+    request: Request, session: Annotated[AuthenticatedSession, Depends(require_session)]
+) -> AuthenticatedSession:
+    presented = request.headers.get(CSRF_HEADER, "")
+    if not tokens_match(session.csrf_token, presented):
+        raise ApiError(403, "forbidden")
+    return session
+
+
+def require_admin_read(
+    session: Annotated[AuthenticatedSession, Depends(require_session)],
+) -> Principal:
+    if session.principal.role != "admin":
+        raise ApiError(403, "forbidden")
+    return session.principal
+
+
+def require_admin_change(
+    request: Request, session: Annotated[AuthenticatedSession, Depends(require_csrf)]
+) -> Principal:
+    """CSRF-checked admin that signed in recently (step-up authentication)."""
+    if session.principal.role != "admin":
+        raise ApiError(403, "forbidden")
+    settings: Settings = request.app.state.settings
+    service: IdentityService = request.app.state.identity_service
+    age = service.now() - session.session_created_at
+    if age > timedelta(minutes=settings.admin_recent_login_minutes):
+        raise ApiError(403, "reauthentication_required")
+    return session.principal
+
+
+def build_router(settings: Settings, service: IdentityService) -> APIRouter:
     router = APIRouter(prefix="/api/v1/auth", dependencies=[Depends(verify_origin)])
     max_age = settings.session_absolute_minutes * 60
-
-    def require_csrf(
-        request: Request, session: Annotated[AuthenticatedSession, Depends(require_session)]
-    ) -> AuthenticatedSession:
-        presented = request.headers.get(CSRF_HEADER, "")
-        if not tokens_match(session.csrf_token, presented):
-            raise ApiError(403, "forbidden")
-        return session
 
     def set_session_cookie(response: Response, token: str) -> None:
         response.set_cookie(
@@ -102,7 +129,10 @@ def build_router(settings: Settings, service: IdentityService) -> APIRouter:
 
     @router.get("/me")
     def me(session: Annotated[AuthenticatedSession, Depends(require_session)]) -> dict[str, str]:
-        return {"user_id": str(session.principal.user_id)}
+        return {
+            "user_id": str(session.principal.user_id),
+            "role": session.principal.role,
+        }
 
     @router.get("/csrf")
     def csrf(

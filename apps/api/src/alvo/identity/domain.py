@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Literal
 from uuid import UUID
+
+Role = Literal["user", "admin"]
 
 # Tolerance for harmless clock jitter; anything earlier than this is treated as invalid.
 _CLOCK_SKEW = timedelta(seconds=5)
@@ -21,6 +24,7 @@ class Principal:
     """The authenticated caller. Modules must take their user id from here, never the client."""
 
     user_id: UUID
+    role: Role
 
 
 @dataclass(frozen=True)

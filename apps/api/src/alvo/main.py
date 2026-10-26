@@ -12,6 +12,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
+from alvo.entitlements.api import build_router as build_entitlements_router
 from alvo.identity.api import build_router as build_identity_router
 from alvo.identity.application import IdentityService
 from alvo.identity.domain import SessionPolicy
@@ -57,7 +58,9 @@ def create_app(
 
     app.state.session_factory = sessionmaker(engine, expire_on_commit=False)
     app.state.identity_service = identity_service
+    app.state.settings = settings
     app.include_router(build_identity_router(settings, identity_service))
+    app.include_router(build_entitlements_router(settings, identity_service))
 
     @app.exception_handler(ApiError)
     async def api_error(request: Request, exc: ApiError) -> JSONResponse:

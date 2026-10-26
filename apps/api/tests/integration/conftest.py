@@ -2,6 +2,7 @@ import os
 import secrets
 import shutil
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -42,3 +43,21 @@ def migrated_database_url(database_url: str) -> str:
         config.set_main_option("script_location", str(api_dir / "alembic"))
         command.upgrade(config, "head")
     return database_url
+
+
+class FakeClock:
+    """Controllable time source injected into the application under test."""
+
+    def __init__(self) -> None:
+        self.current = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.current
+
+    def advance(self, **kwargs: float) -> None:
+        self.current += timedelta(**kwargs)
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()

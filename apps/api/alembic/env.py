@@ -3,7 +3,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import create_engine
 
-import alvo.identity.infrastructure  # noqa: F401  (registers tables on the metadata)
+import alvo.entitlements.infrastructure  # noqa: F401  (registers tables on the metadata)
+import alvo.identity.infrastructure  # noqa: F401
 from alvo.shared.config import Settings
 from alvo.shared.orm import Base
 

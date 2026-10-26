@@ -13,7 +13,12 @@ from urllib.parse import urlsplit
 from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_PLACEHOLDER = re.compile(r"change_?me|your_|placeholder|example|todo|xxx", re.IGNORECASE)
+# Distinctive words are rejected anywhere in the value. They are long enough that a genuine
+# random secret essentially never contains them by chance.
+_PLACEHOLDER = re.compile(r"change_?me|your_|placeholder|example", re.IGNORECASE)
+# Short or common words are rejected only when they ARE the whole value (or just repeats of
+# it); as substrings they would randomly reject valid random secrets (e.g. "...XxX...").
+_WHOLE_VALUE_PLACEHOLDER = re.compile(r"(x+|todo|password|secret|changeit)+", re.IGNORECASE)
 _MIN_SESSION_SECRET_LENGTH = 32
 _MIN_DB_PASSWORD_LENGTH = 16
 _MIN_DISTINCT_CHARS = 10
@@ -22,7 +27,7 @@ _RUNTIME_SECRETS_DIR = Path("/run/secrets")
 
 
 def _reject_placeholder(value: str, label: str) -> None:
-    if _PLACEHOLDER.search(value):
+    if _PLACEHOLDER.search(value) or _WHOLE_VALUE_PLACEHOLDER.fullmatch(value):
         raise ValueError(f"{label} looks like a placeholder")
 
 

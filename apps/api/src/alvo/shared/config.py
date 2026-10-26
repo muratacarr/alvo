@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _PLACEHOLDER = re.compile(r"change_?me|your_|placeholder|example|todo|xxx", re.IGNORECASE)
@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     environment: Literal["development", "test", "production"]
     database_url: SecretStr
     session_secret: SecretStr
+    # Exact origin the PWA is served from; unsafe requests must carry it in `Origin`.
+    public_origin: str = "http://localhost:8000"
+    # "mock" exposes a development-only login route; it is rejected in production.
+    identity_provider: Literal["none", "mock"] = "none"
+    session_idle_minutes: int = 30
+    session_absolute_minutes: int = 720
 
     @field_validator("session_secret")
     @classmethod
@@ -64,3 +70,22 @@ class Settings(BaseSettings):
         if len(password) < _MIN_DB_PASSWORD_LENGTH:
             raise ValueError("database password is too short")
         return value
+
+    @field_validator("public_origin")
+    @classmethod
+    def _validate_public_origin(cls, value: str) -> str:
+        parts = urlsplit(value)
+        if parts.scheme not in {"http", "https"} or not parts.netloc or parts.path not in {"", "/"}:
+            raise ValueError("public_origin must be an origin like https://host[:port]")
+        return f"{parts.scheme}://{parts.netloc}"
+
+    @model_validator(mode="after")
+    def _validate_environment_rules(self) -> "Settings":
+        if not 0 < self.session_idle_minutes <= self.session_absolute_minutes:
+            raise ValueError("session lifetimes must satisfy 0 < idle <= absolute")
+        if self.environment == "production":
+            if not self.public_origin.startswith("https://"):
+                raise ValueError("public_origin must use https in production")
+            if self.identity_provider == "mock":
+                raise ValueError("the mock identity provider is forbidden in production")
+        return self

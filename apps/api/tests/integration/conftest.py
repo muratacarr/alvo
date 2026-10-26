@@ -2,8 +2,11 @@ import os
 import secrets
 import shutil
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from testcontainers.community.postgres import PostgresContainer
 
 # Same digest as compose.yaml so tests exercise the version we deploy.
@@ -25,3 +28,17 @@ def database_url() -> Iterator[str]:
         driver="psycopg",
     ) as postgres:
         yield postgres.get_connection_url()
+
+
+@pytest.fixture(scope="session")
+def migrated_database_url(database_url: str) -> str:
+    """The shared test database with all migrations applied (once per session)."""
+    api_dir = Path(__file__).resolve().parents[2]
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("ALVO_ENVIRONMENT", "test")
+        patch.setenv("ALVO_DATABASE_URL", database_url)
+        patch.setenv("ALVO_SESSION_SECRET", secrets.token_urlsafe(48))
+        config = Config(str(api_dir / "alembic.ini"))
+        config.set_main_option("script_location", str(api_dir / "alembic"))
+        command.upgrade(config, "head")
+    return database_url

@@ -18,6 +18,8 @@ def settings_factory() -> SettingsFactory:
             "environment": "test",
             "database_url": f"postgresql+psycopg://alvo_app:{secrets.token_urlsafe(24)}@db:5432/alvo",
             "session_secret": secrets.token_urlsafe(48),
+            "public_origin": "https://testserver",
+            "identity_provider": "mock",
         }
         values.update(overrides)
         return Settings(_env_file=None, **values)

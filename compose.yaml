@@ -43,6 +43,9 @@ services:
     user: "10001:10001"
     environment:
       ALVO_ENVIRONMENT: development
+      ALVO_PUBLIC_ORIGIN: http://localhost:8000
+      # Development-only login; the app refuses to start with this value in production.
+      ALVO_IDENTITY_PROVIDER: mock
     secrets:
       - alvo_database_url
       - alvo_session_secret

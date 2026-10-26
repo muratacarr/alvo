@@ -9,3 +9,8 @@ description = "Specification document prose (generic-api-key false positive)"
 condition = "AND"
 paths = ['''(^|/)alvo-claude-code-master-prompt-v1\.4\.md$''']
 targetRules = ["generic-api-key"]
+
+# Local virtualenvs hold third-party packages; they are gitignored and never committed.
+[[allowlists]]
+description = "Gitignored local virtual environment"
+paths = ['''(^|/)\.venv/''']

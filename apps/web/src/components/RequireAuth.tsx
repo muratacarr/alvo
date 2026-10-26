@@ -1,3 +1,4 @@
+import { Alert, Button } from "antd";
 import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
@@ -15,15 +16,12 @@ export function RequireAuth() {
   }
   if (state.status === "error") {
     return (
-      <div role="alert" className="m-8 max-w-md space-y-3 rounded-md bg-red-50 p-4 text-red-900">
-        <p>{describeError(state.error, "Something went wrong. Please try again.")}</p>
-        <button
-          type="button"
-          onClick={retry}
-          className="rounded-md border border-red-900 px-3 py-1 font-medium"
-        >
-          Try again
-        </button>
+      <div className="m-8 max-w-md">
+        <Alert
+          type="error"
+          title={describeError(state.error, "Something went wrong. Please try again.")}
+          action={<Button onClick={retry}>Try again</Button>}
+        />
       </div>
     );
   }

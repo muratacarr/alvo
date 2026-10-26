@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 
+import { AntProviders } from "../AntProviders";
 import { AuthProvider } from "../auth/AuthProvider";
 
 export function renderWithProviders(ui: ReactElement, path = "/") {
@@ -10,11 +11,13 @@ export function renderWithProviders(ui: ReactElement, path = "/") {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[path]}>
-        <AuthProvider>{ui}</AuthProvider>
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <AntProviders>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={[path]}>
+          <AuthProvider>{ui}</AuthProvider>
+        </MemoryRouter>
+      </QueryClientProvider>
+    </AntProviders>,
   );
 }
 

@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -63,8 +64,20 @@ def verify_origin(request: Request) -> None:
         raise ApiError(403, "forbidden")
 
 
+# Declares the header in the OpenAPI document so Swagger UI's "Authorize" can send it.
+# Documentation only (auto_error=False): the real check is `require_csrf` below.
+csrf_header_scheme = APIKeyHeader(
+    name=CSRF_HEADER,
+    scheme_name="CSRFToken",
+    auto_error=False,
+    description="The `csrf_token` returned by login (or GET /api/v1/auth/csrf).",
+)
+
+
 def require_csrf(
-    request: Request, session: Annotated[AuthenticatedSession, Depends(require_session)]
+    request: Request,
+    session: Annotated[AuthenticatedSession, Depends(require_session)],
+    _documented: Annotated[str | None, Depends(csrf_header_scheme)] = None,
 ) -> AuthenticatedSession:
     presented = request.headers.get(CSRF_HEADER, "")
     if not tokens_match(session.csrf_token, presented):

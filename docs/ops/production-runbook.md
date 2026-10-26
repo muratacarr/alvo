@@ -49,7 +49,7 @@ Never paste these values into chat, issues, CI or a commit. Rotate them if they 
 
 ## 3. Cloudflare Tunnel (owner)
 
-1. Put the domain on Cloudflare (DNS managed there).
+1. Put the domain's **DNS** on Cloudflare (free plan). The owner's domain is registered at Namecheap and stays registered there: add the domain in Cloudflare, check that the imported DNS records are complete (especially any mail records, MX and TXT), then set the two Cloudflare nameservers in Namecheap (Domain List, Manage, Nameservers, Custom DNS). Wait until Cloudflare shows the domain as Active. Use a sub-domain such as `alvo.<your-domain>` for the app.
 2. Zero Trust dashboard, Networks, Tunnels: create a tunnel, choose the Docker connector, and copy only the **token** into `/etc/alvo/secrets/tunnel_token`.
 3. Add a public hostname (for example `alvo.<your-domain>`) with service type HTTP and URL `http://web:8080`.
 4. Set `ALVO_PUBLIC_ORIGIN=https://alvo.<your-domain>`. The API refuses to start in production with an `http://` origin.

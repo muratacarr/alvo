@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Alvo content import file, schema version 1.0",
+  "description": "Content only. Identifiers, ownership, review history and any other field are rejected. Limits that a schema cannot express: at most 2000 items per file, at most 100 modules, at most 200 topics per module, at most 2 MiB, JSON object keys must not repeat. Text is stored as plain text and must not contain control characters.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "program"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "modules"],
+      "properties": {
+        "title": { "$ref": "#/$defs/title" },
+        "targetLanguage": {
+          "type": "string",
+          "maxLength": 35,
+          "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+        },
+        "level": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "modules": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/module" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "topics"],
+      "properties": {
+        "title": { "$ref": "#/$defs/title" },
+        "topics": {
+          "type": "array",
+          "maxItems": 200,
+          "items": { "$ref": "#/$defs/topic" }
+        }
+      }
+    },
+    "topic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "items"],
+      "properties": {
+        "title": { "$ref": "#/$defs/title" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "prompt"],
+      "properties": {
+        "externalId": {
+          "type": "string",
+          "maxLength": 100,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        },
+        "type": {
+          "enum": ["question", "phrase", "vocabulary", "concept", "scenario"]
+        },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "sampleAnswer": { "type": "string", "minLength": 1, "maxLength": 10000 },
+        "translation": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "keywords": {
+          "type": "array",
+          "maxItems": 30,
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 30,
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 }
+        },
+        "followUpQuestions": {
+          "type": "array",
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 500 }
+        },
+        "difficulty": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "practice": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "modes": {
+              "type": "array",
+              "maxItems": 7,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "read_aloud",
+                  "shadowing",
+                  "fill_gaps",
+                  "keyword_speaking",
+                  "guided_speaking",
+                  "free_speaking",
+                  "follow_up_challenge"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

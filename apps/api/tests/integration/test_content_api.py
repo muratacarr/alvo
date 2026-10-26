@@ -192,3 +192,61 @@ def test_cross_project_references_are_rejected_even_for_the_same_owner(world: Wo
 def test_content_endpoints_require_authentication(world: World) -> None:
     world.actor.client.cookies.clear()
     assert world.actor.client.get(f"{world.base}/items").status_code == 401
+
+
+def test_a_duplicate_prompt_in_the_same_project_conflicts(world: World) -> None:
+    again = world.actor.post(
+        f"{world.base}/items", world.item_payload(prompt="  tell me ABOUT yourself. ")
+    )
+    assert again.status_code == 409
+    assert again.json() == {"error": "duplicate"}
+
+
+def test_the_same_prompt_with_another_type_is_allowed(world: World) -> None:
+    phrase = world.actor.post(f"{world.base}/items", world.item_payload(type="phrase"))
+    assert phrase.status_code == 201
+
+
+def test_the_same_prompt_is_allowed_in_another_project(world: World) -> None:
+    other = world.actor.post(P, {"title": "Other"}).json()
+    module = world.actor.post(f"{P}/{other['id']}/modules", {"title": "m"}).json()
+    topic = world.actor.post(
+        f"{P}/{other['id']}/topics", {"module_id": module["id"], "title": "t"}
+    ).json()
+    created = world.actor.post(f"{P}/{other['id']}/items", world.item_payload(topic_id=topic["id"]))
+    assert created.status_code == 201
+
+
+def test_updating_a_prompt_into_a_duplicate_conflicts(world: World) -> None:
+    second = world.actor.post(f"{world.base}/items", world.item_payload(prompt="Another one?"))
+    url = f"{world.base}/items/{second.json()['id']}"
+    clash = world.actor.patch(url, {"prompt": "Tell me about yourself."})
+    assert clash.status_code == 409
+    assert world.actor.get(url).json()["prompt"] == "Another one?"
+
+
+def test_changing_the_prompt_updates_the_duplicate_identity(world: World) -> None:
+    url = f"{world.base}/items/{world.item['id']}"
+    world.actor.patch(url, {"prompt": "A brand new prompt?"})
+    reuse = world.actor.post(f"{world.base}/items", world.item_payload())
+    assert reuse.status_code == 201  # the old prompt is free again
+
+
+def test_external_id_and_practice_modes_round_trip_and_external_id_is_unique(
+    world: World,
+) -> None:
+    payload = world.item_payload(
+        prompt="With ids?", external_id="ext-1", practice_modes=["read_aloud", "fill_gaps"]
+    )
+    created = world.actor.post(f"{world.base}/items", payload)
+    assert created.status_code == 201
+    assert created.json()["external_id"] == "ext-1"
+    assert created.json()["practice_modes"] == ["read_aloud", "fill_gaps"]
+    clash = world.actor.post(
+        f"{world.base}/items", world.item_payload(prompt="Other text?", external_id="ext-1")
+    )
+    assert clash.status_code == 409
+    bad = world.actor.post(
+        f"{world.base}/items", world.item_payload(prompt="Bad modes?", practice_modes=["teleport"])
+    )
+    assert bad.status_code == 422

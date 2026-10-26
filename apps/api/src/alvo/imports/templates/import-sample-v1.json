@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0",
+  "program": {
+    "title": "Backend Developer Interview",
+    "targetLanguage": "en",
+    "level": "B1",
+    "modules": [
+      {
+        "title": "Technical Interview",
+        "topics": [
+          {
+            "title": "Dependency Injection",
+            "items": [
+              {
+                "externalId": "backend-di-001",
+                "type": "question",
+                "prompt": "What is dependency injection?",
+                "sampleAnswer": "Dependency injection reduces coupling and improves testability.",
+                "translation": "Bağımlılık enjeksiyonu nedir?",
+                "keywords": ["coupling", "testability", "dependencies"],
+                "tags": ["backend", "design-patterns"],
+                "followUpQuestions": ["How does dependency injection help unit testing?"],
+                "difficulty": 2,
+                "practice": {
+                  "modes": ["read_aloud", "fill_gaps", "keyword_speaking", "free_speaking"]
+                }
+              },
+              {
+                "externalId": "backend-di-002",
+                "type": "concept",
+                "prompt": "Inversion of control",
+                "sampleAnswer": "A framework calls your code instead of your code calling the framework."
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "HR Interview",
+        "topics": [
+          {
+            "title": "About Me",
+            "items": [
+              {
+                "externalId": "hr-me-001",
+                "type": "question",
+                "prompt": "Tell me about yourself.",
+                "keywords": ["experience", "technologies", "career goal"]
+              },
+              {
+                "type": "phrase",
+                "prompt": "I am passionate about building reliable systems.",
+                "translation": "Güvenilir sistemler kurmaya tutkuluyum."
+              },
+              {
+                "type": "vocabulary",
+                "prompt": "scalable",
+                "sampleAnswer": "Able to handle growth in users or data."
+              },
+              {
+                "type": "scenario",
+                "prompt": "A teammate disagrees with your design. What do you say?",
+                "difficulty": 3
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

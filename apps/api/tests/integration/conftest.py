@@ -77,14 +77,16 @@ def clock() -> FakeClock:
 
 
 @pytest.fixture
-def new_actor(migrated_database_url: str, settings_factory: SettingsFactory) -> Callable[[], Actor]:
-    """Create a fresh browser (own cookie jar) signed in as a brand-new user."""
+def new_actor(
+    migrated_database_url: str, settings_factory: SettingsFactory
+) -> Callable[..., Actor]:
+    """A fresh browser (own cookie jar) signed in as a new user, or as `subject` if given."""
 
     ticking = TickingClock()
 
-    def build() -> Actor:
-        settings = settings_factory(database_url=migrated_database_url)
+    def build(subject: str | None = None, **settings_overrides: str) -> Actor:
+        settings = settings_factory(database_url=migrated_database_url, **settings_overrides)
         app = create_app(settings, readiness_probe=lambda: True, clock=ticking)
-        return sign_in(TestClient(app, base_url="https://testserver"))
+        return sign_in(TestClient(app, base_url="https://testserver"), subject)
 
     return build

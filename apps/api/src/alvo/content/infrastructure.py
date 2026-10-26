@@ -5,7 +5,7 @@ topic whose module (or an item whose topic) belongs to a different project. Ever
 filters by `project_id`; ownership of that project is checked by the caller.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -23,9 +23,19 @@ from sqlalchemy import (
     text,
     tuple_,
 )
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from alvo.content.domain import ItemRecord, ItemType, ModuleRecord, TopicRecord
+from alvo.content.domain import (
+    ApplyResult,
+    ContentPlan,
+    DedupeIndex,
+    ItemRecord,
+    ItemType,
+    ModuleRecord,
+    TopicRecord,
+    title_key,
+)
 from alvo.shared.orm import Base
 
 
@@ -106,6 +116,12 @@ class ItemRow(Base):
         ARRAY(String(500)), server_default=text("'{}'"), nullable=False
     )
     difficulty: Mapped[int | None] = mapped_column(SmallInteger)
+    external_id: Mapped[str | None] = mapped_column(String(100))
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    loose_key: Mapped[str] = mapped_column(String(64))
+    practice_modes: Mapped[list[str]] = mapped_column(
+        ARRAY(String(32)), server_default=text("'{}'"), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -142,6 +158,8 @@ def _item(row: ItemRow) -> ItemRecord:
         list(row.tags),
         list(row.follow_up_questions),
         row.difficulty,
+        row.external_id,
+        list(row.practice_modes),
         row.created_at,
         row.updated_at,
         row.archived_at,
@@ -304,3 +322,119 @@ class SqlContentStore:
 
     def archive_item(self, project_id: UUID, item_id: UUID, now: datetime) -> bool:
         return self._archive(ItemRow, project_id, item_id, now)
+
+    # duplicate detection, bulk apply and export ---------------------------------------------
+
+    def load_dedupe_index(self, project_id: UUID) -> DedupeIndex:
+        items = self._db.execute(
+            select(
+                ItemRow.external_id,
+                ItemRow.fingerprint,
+                ItemRow.loose_key,
+                ItemRow.type,
+                ItemRow.prompt,
+            ).where(ItemRow.project_id == project_id)
+        )
+        external_ids: set[str] = set()
+        fingerprints: set[str] = set()
+        loose: dict[tuple[str, str], str] = {}
+        for external_id, fingerprint, loose_key, item_type, prompt in items:
+            if external_id:
+                external_ids.add(external_id)
+            fingerprints.add(fingerprint)
+            loose.setdefault((item_type, loose_key), prompt)
+        modules: dict[str, UUID] = {}
+        for module in self._db.execute(
+            select(ModuleRow.id, ModuleRow.title)
+            .where(ModuleRow.project_id == project_id, ModuleRow.archived_at.is_(None))
+            .order_by(ModuleRow.created_at, ModuleRow.id)
+        ):
+            modules.setdefault(title_key(module.title), module.id)
+        topics: dict[tuple[UUID, str], UUID] = {}
+        for topic in self._db.execute(
+            select(TopicRow.id, TopicRow.module_id, TopicRow.title)
+            .where(TopicRow.project_id == project_id, TopicRow.archived_at.is_(None))
+            .order_by(TopicRow.created_at, TopicRow.id)
+        ):
+            topics.setdefault((topic.module_id, title_key(topic.title)), topic.id)
+        return DedupeIndex(external_ids, fingerprints, loose, modules, topics)
+
+    def apply_plan(self, project_id: UUID, plan: ContentPlan, now: datetime) -> ApplyResult:
+        """Create the planned containers and items. Existing rows are never touched.
+
+        Items use ON CONFLICT DO NOTHING, so a concurrent writer that got there first wins
+        and nothing is overwritten. Timestamps advance by a microsecond per row so the order
+        of the file is the order of listing.
+        """
+        created_modules = created_topics = inserted = skipped = 0
+        tick = 0
+
+        def stamp() -> datetime:
+            nonlocal tick
+            tick += 1
+            return now + timedelta(microseconds=tick)
+
+        for planned_module in plan.modules:
+            module_id = planned_module.existing_id
+            if module_id is None:
+                module_id = self.create_module(project_id, planned_module.title, stamp()).id
+                created_modules += 1
+            for planned_topic in planned_module.topics:
+                topic_id = planned_topic.existing_id
+                if topic_id is None:
+                    topic_id = self.create_topic(
+                        project_id, module_id, planned_topic.title, stamp()
+                    ).id
+                    created_topics += 1
+                rows = []
+                for planned in planned_topic.items:
+                    fields, moment = planned.fields, stamp()
+                    rows.append(
+                        {
+                            "id": uuid4(),
+                            "project_id": project_id,
+                            "topic_id": topic_id,
+                            "type": fields.type.value,
+                            "prompt": fields.prompt,
+                            "sample_answer": fields.sample_answer,
+                            "translation": fields.translation,
+                            "keywords": fields.keywords,
+                            "tags": fields.tags,
+                            "follow_up_questions": fields.follow_up_questions,
+                            "difficulty": fields.difficulty,
+                            "external_id": fields.external_id,
+                            "fingerprint": planned.fingerprint,
+                            "loose_key": planned.loose,
+                            "practice_modes": fields.practice_modes,
+                            "created_at": moment,
+                            "updated_at": moment,
+                            "archived_at": None,
+                        }
+                    )
+                for start in range(0, len(rows), 500):
+                    chunk = rows[start : start + 500]
+                    # RETURNING tells us exactly which rows were inserted (DO NOTHING skips the
+                    # rest), unlike rowcount, which is unreliable for multi-row ORM inserts.
+                    returned = self._db.execute(
+                        insert(ItemRow).values(chunk).on_conflict_do_nothing().returning(ItemRow.id)
+                    ).all()
+                    done = len(returned)
+                    inserted += done
+                    skipped += len(chunk) - done
+        return ApplyResult(created_modules, created_topics, inserted, skipped)
+
+    def export_tree(
+        self, project_id: UUID
+    ) -> list[tuple[ModuleRecord, list[tuple[TopicRecord, list[ItemRecord]]]]]:
+        """Live content only, in creation order: archived modules, topics, items are skipped."""
+        everything = {"include_archived": False, "after": None, "limit": 10**6}
+        modules = self.list_modules(project_id, **everything)
+        topics = self.list_topics(project_id, None, **everything)
+        items = self.list_items(project_id, None, **everything)
+        by_topic: dict[UUID, list[ItemRecord]] = {}
+        for item in items:
+            by_topic.setdefault(item.topic_id, []).append(item)
+        by_module: dict[UUID, list[tuple[TopicRecord, list[ItemRecord]]]] = {}
+        for topic in topics:
+            by_module.setdefault(topic.module_id, []).append((topic, by_topic.get(topic.id, [])))
+        return [(m, by_module.get(m.id, [])) for m in modules]

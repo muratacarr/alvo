@@ -119,7 +119,7 @@ def test_ci_runs_browser_tests_against_the_real_stack_without_secrets() -> None:
 
 def test_ci_lints_operations_scripts_and_validates_the_production_compose_file() -> None:
     text = ci_text()
-    assert "shellcheck ops/backup/*.sh" in text
+    assert "shellcheck ops/backup/*.sh ops/deploy/*.sh" in text
     assert "docker compose -f compose.prod.yaml config -q" in text
     # The lint job keeps its name: it is a required status check in the branch ruleset.
     assert load("ci.yml")["jobs"]["dockerfile"]["name"] == "Dockerfile lint"

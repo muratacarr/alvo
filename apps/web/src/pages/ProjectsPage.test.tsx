@@ -190,6 +190,13 @@ describe("ProjectsPage", () => {
     expect(calls.filter((c) => c.method === "GET" && c.path.startsWith("/api/v1/projects"))).toHaveLength(2);
   });
 
+  it("links each project to its detail page", async () => {
+    mockApi({ ...session, "GET /api/v1/projects": page([project()]) });
+    renderPage();
+    const link = await screen.findByRole("link", { name: "HR Interview" });
+    expect(link).toHaveAttribute("href", "/projects/22222222-2222-4222-8222-222222222222");
+  });
+
   it("has no accessibility violations", async () => {
     mockApi({ ...session, "GET /api/v1/projects": page([project(), project({ archived: true, id: "6", title: "Old project" })]) });
     const { container } = renderPage();

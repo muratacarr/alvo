@@ -36,11 +36,24 @@ def test_database_is_only_on_internal_networks() -> None:
         assert compose["networks"][name].get("internal") is True
 
 
-def test_only_the_api_publishes_ports_and_only_on_loopback() -> None:
+def test_only_the_web_entrypoint_publishes_ports_and_only_on_loopback() -> None:
     for name, svc in services().items():
         for port in svc.get("ports", []):
-            assert name == "api"
+            assert name == "web", name
             assert str(port).startswith("127.0.0.1:"), port
+    assert services()["web"]["ports"]
+
+
+def test_the_api_is_reachable_only_through_the_web_proxy() -> None:
+    assert "ports" not in services()["api"]
+    assert "web" not in services()["api"].get("depends_on", {})
+    assert "api" in services()["web"]["depends_on"]
+
+
+def test_the_public_origin_matches_the_published_web_port() -> None:
+    origin = services()["api"]["environment"]["ALVO_PUBLIC_ORIGIN"]
+    port = str(services()["web"]["ports"][0]).split(":")[1]
+    assert origin == f"http://localhost:{port}"
 
 
 def test_no_service_is_privileged_or_mounts_the_docker_socket() -> None:
@@ -61,9 +74,10 @@ def test_every_service_is_hardened() -> None:
         assert "healthcheck" in svc, name
 
 
-def test_api_runs_as_a_non_root_user() -> None:
-    user = str(services()["api"].get("user", ""))
-    assert user.split(":")[0] not in {"", "root", "0"}
+def test_application_containers_run_as_non_root_users() -> None:
+    for name in ("api", "web", "db"):
+        user = str(services()[name].get("user", ""))
+        assert user.split(":")[0] not in {"", "root", "0"}, name
 
 
 def test_database_image_is_pinned_by_digest() -> None:

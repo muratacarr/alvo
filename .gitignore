@@ -1,0 +1,30 @@
+# Secrets and local state (guardrail only; secret scanning is the real control)
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.p12
+*.dump
+*.sql.gz
+*.bak
+backups/
+
+# Private, never committed
+/docs/interview/
+
+# Recordings and generated reports
+*.wav
+*.webm
+*.m4a
+reports/private/
+
+# Tooling
+node_modules/
+__pycache__/
+.venv/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

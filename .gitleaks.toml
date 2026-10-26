@@ -1,0 +1,11 @@
+# Extends the maintained default ruleset. Do not add blanket allowlists;
+# every exception needs a narrow path/regex and a comment explaining why.
+[extend]
+useDefault = true
+
+# Prose in the project specification trips the entropy-based generic rule.
+[[allowlists]]
+description = "Specification document prose (generic-api-key false positive)"
+condition = "AND"
+paths = ['''(^|/)alvo-claude-code-master-prompt-v1\.4\.md$''']
+targetRules = ["generic-api-key"]

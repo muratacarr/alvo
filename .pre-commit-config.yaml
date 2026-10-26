@@ -1,0 +1,34 @@
+# Local hooks only: no third-party hook repositories to trust or pin.
+# Requires `gitleaks` on PATH (winget install Gitleaks.Gitleaks).
+repos:
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (staged changes)
+        entry: gitleaks git --staged --pre-commit --redact --no-banner --config .gitleaks.toml
+        language: system
+        pass_filenames: false
+      - id: protected-files
+        name: block secret-bearing files
+        entry: Refusing to commit a protected file (env, key, dump, recording)
+        language: fail
+        files: (^|/)(\.env(\..*)?|secrets/.*|.*\.(pem|key|p12|dump|wav|webm|m4a))$
+        exclude: (^|/)\.env\.example$
+      - id: ruff
+        name: ruff check
+        entry: uv run --project apps/api ruff check apps/api
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: ruff-format
+        name: ruff format --check
+        entry: uv run --project apps/api ruff format --check apps/api
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: mypy
+        name: mypy
+        entry: uv run --project apps/api mypy --config-file apps/api/pyproject.toml apps/api/src apps/api/tests
+        language: system
+        pass_filenames: false
+        types: [python]

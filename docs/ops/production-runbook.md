@@ -21,8 +21,13 @@ uname -m; lsb_release -a; free -h; df -h; lsblk -f
 docker --version; docker compose version
 ```
 
-- The database must live on an **SSD**, not a microSD card. Point Docker's data directory at the SSD (`data-root` in `/etc/docker/daemon.json`) before the first start.
-- Install Docker from Docker's official apt repository, and the host tools used by the backup: `age` and `rclone`.
+- **Storage (decision D-6, 2026-10-27): the Pi runs from a 229 GB microSD card; the owner accepted this for now.** Constant database writes wear out SD cards, so treat the card as likely to fail someday and plan for it:
+  - Use a high-endurance card (or move to a USB 3 SSD later: stop the stack, move Docker's `data-root`, start it again).
+  - Back up **every 6 hours** instead of nightly (RPO 6 hours). The backup is the real safety net, so run a restore drill before launch.
+  - Mount the root filesystem with `noatime`, keep `journald` logs bounded, and never run swap on the card.
+  - Watch for early warnings: `sudo dmesg | grep -i -E 'mmc|i/o error'` and a filesystem that turns read-only mean "replace the card now".
+  - Keep a spare card flashed with Ubuntu and Docker, so recovery is: new card, install, restore the latest backup.
+- Install Docker from Docker's official apt repository (not `snap` and not Ubuntu's `docker.io`; the snap build restricts file access and breaks the secret and volume paths used here), and the host tools used by the backup: `age` and `rclone`.
 - Enable automatic security updates and a host firewall. Docker bypasses `ufw` for published ports; this stack publishes none, which is the real protection.
 
 ## 2. Secrets (owner, on the Pi)
@@ -96,7 +101,7 @@ ALVO_BACKUP_AGE_IDENTITY=/path/to/alvo-backup.key \
 
 It restores into a temporary database, prints the table count and schema version, then drops it. A backup that has never been restored is not a backup.
 
-Targets: RPO 24 hours (nightly), RTO 4 hours.
+Targets: RPO 6 hours on the microSD card (24 hours once the database is on an SSD), RTO 4 hours. Schedule the backup every 6 hours.
 
 ### What was verified, and how
 

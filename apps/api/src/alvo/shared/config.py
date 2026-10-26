@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     session_absolute_minutes: int = 720
     # Admin changes require a sign-in no older than this (step-up authentication).
     admin_recent_login_minutes: int = 15
+    # Largest accepted request body in bytes (imports get their own, larger limit later).
+    max_request_bytes: int = 1_048_576
     # Global ceilings for per-user AI limits an admin may grant. Zero means "grant nothing";
     # the owner raises them deliberately (see docs/security/api-spend-policy.md).
     ai_max_requests_per_day: int = 0
@@ -94,6 +96,8 @@ class Settings(BaseSettings):
     def _validate_environment_rules(self) -> "Settings":
         if not 0 < self.session_idle_minutes <= self.session_absolute_minutes:
             raise ValueError("session lifetimes must satisfy 0 < idle <= absolute")
+        if not 1024 <= self.max_request_bytes <= 50 * 1024 * 1024:
+            raise ValueError("max_request_bytes must be between 1 KiB and 50 MiB")
         if self.admin_recent_login_minutes <= 0:
             raise ValueError("admin_recent_login_minutes must be positive")
         if self.ai_max_requests_per_day < 0 or self.ai_max_monthly_units < 0:

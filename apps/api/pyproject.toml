@@ -25,6 +25,7 @@ dev = [
     "zizmor>=1.31.1",
     "testcontainers[postgres]>=4.15.0",
     "httpx2>=2.16.0",
+    "import-linter>=2.15",
 ]
 
 [build-system]
@@ -53,3 +54,42 @@ known-third-party = ["alembic"]
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[tool.importlinter]
+root_package = "alvo"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Business modules do not depend on each other except along the allowed edges"
+type = "forbidden"
+source_modules = ["alvo.identity"]
+forbidden_modules = ["alvo.projects", "alvo.content", "alvo.entitlements"]
+
+[[tool.importlinter.contracts]]
+name = "projects only depends on identity and shared"
+type = "forbidden"
+source_modules = ["alvo.projects"]
+forbidden_modules = ["alvo.content", "alvo.entitlements"]
+
+[[tool.importlinter.contracts]]
+name = "entitlements only depends on identity and shared"
+type = "forbidden"
+source_modules = ["alvo.entitlements"]
+forbidden_modules = ["alvo.projects", "alvo.content"]
+
+[[tool.importlinter.contracts]]
+name = "shared never depends on a business module"
+type = "forbidden"
+source_modules = ["alvo.shared"]
+forbidden_modules = ["alvo.identity", "alvo.projects", "alvo.content", "alvo.entitlements"]
+
+[[tool.importlinter.contracts]]
+name = "Domain layers are framework-free"
+type = "forbidden"
+source_modules = [
+    "alvo.identity.domain",
+    "alvo.projects.domain",
+    "alvo.content.domain",
+    "alvo.entitlements.domain",
+]
+forbidden_modules = ["sqlalchemy", "fastapi", "pydantic", "starlette"]

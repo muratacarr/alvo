@@ -12,6 +12,13 @@
 # Optional:
 #   ALVO_COMPOSE               how to reach the stack (default: docker compose -f /opt/alvo/compose.prod.yaml)
 #   ALVO_BACKUP_STATE_DIR      where the "last success" marker is written (default /var/lib/alvo-backup)
+#   ALVO_BACKUP_KEEP_DAYS      delete backups older than this many days from the destination, but
+#                              only after the new one was uploaded. Use it when the destination is
+#                              a local folder; leave it unset for object storage (use its lifecycle rules).
+#
+# ALVO_BACKUP_REMOTE may be a plain folder (for example /var/backups/alvo). A computer at home then
+# PULLS the files from the Pi (see docs/ops/production-runbook.md), so the Pi holds no credentials
+# for that computer.
 set -euo pipefail
 umask 077
 
@@ -20,6 +27,13 @@ umask 077
 compose="${ALVO_COMPOSE:-docker compose -f /opt/alvo/compose.prod.yaml}"
 state_dir="${ALVO_BACKUP_STATE_DIR:-/var/lib/alvo-backup}"
 min_bytes=1024
+keep_days="${ALVO_BACKUP_KEEP_DAYS:-}"
+
+case "$keep_days" in
+  "") ;;
+  *[!0-9]* | 0) echo "ALVO_BACKUP_KEEP_DAYS must be a positive whole number" >&2; exit 2 ;;
+  *) ;;
+esac
 
 case "$ALVO_BACKUP_AGE_RECIPIENT" in
   age1*) ;;
@@ -42,6 +56,10 @@ if [ "$size" -lt "$min_bytes" ]; then
 fi
 
 rclone copyto "$file" "${ALVO_BACKUP_REMOTE%/}/$name"
+
+if [ -n "$keep_days" ]; then
+  rclone delete --min-age "${keep_days}d" --include "alvo-*.dump.age" "${ALVO_BACKUP_REMOTE%/}"
+fi
 
 mkdir -p "$state_dir"
 date -u +%s > "$state_dir/last-success"

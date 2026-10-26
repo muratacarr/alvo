@@ -109,3 +109,27 @@ def test_missing_or_wrong_settings_stop_the_backup(tmp_path: Path) -> None:
     result = _run(env)
     assert result.returncode == 2
     assert "AGE-SECRET-KEY" not in result.stdout + result.stderr
+
+
+@needs_bash
+def test_old_backups_are_pruned_only_after_a_successful_upload(tmp_path: Path) -> None:
+    result = _run(_env(tmp_path, 5000, ALVO_BACKUP_KEEP_DAYS="14"))
+    assert result.returncode == 0, result.stderr
+    lines = (tmp_path / "rclone.log").read_text(encoding="utf-8").splitlines()
+    assert [line.split()[0] for line in lines] == ["copyto", "delete"]
+    assert "--min-age 14d" in lines[1]
+    assert "--include alvo-*.dump.age" in lines[1]  # never touches other files
+
+
+@needs_bash
+def test_nothing_is_pruned_when_the_upload_is_skipped_or_the_setting_is_invalid(
+    tmp_path: Path,
+) -> None:
+    tiny = _run(_env(tmp_path, 10, ALVO_BACKUP_KEEP_DAYS="14"))
+    assert tiny.returncode != 0
+    assert not (tmp_path / "rclone.log").exists()
+    second = tmp_path / "second"
+    second.mkdir()
+    bad = _run(_env(second, 5000, ALVO_BACKUP_KEEP_DAYS="0; rm -rf /"))
+    assert bad.returncode == 2
+    assert not (second / "rclone.log").exists()

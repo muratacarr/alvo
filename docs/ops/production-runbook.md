@@ -74,27 +74,38 @@ docker compose -f compose.prod.yaml ps             # every service should become
 
 ## 5. Backups
 
-**How it works:** `pg_dump` is encrypted with the **public** age key and uploaded with rclone. The Pi never holds the private key, so someone who steals the Pi cannot decrypt old backups from the bucket.
+**Design (decision D-4, 2026-10-27): the backup copy goes to a computer at home, and that computer pulls it.**
 
-One-time setup (owner):
+- `backup.sh` runs `pg_dump`, encrypts it with the **public** age key and stores the file in `/var/backups/alvo` on the Pi (kept for 14 days). The Pi never holds the private key, so someone who steals the Pi or the files cannot read the backups.
+- Your home computer then **pulls** the files from the Pi with a read-only SSH key. The Pi has no key, password or address for the home computer, so a compromised Pi cannot reach it. The computer uses `copy`, never `sync`, so deleting files on the Pi cannot delete the copies.
+- Trade-off you accepted: both machines are in the same home. Fire, theft or a power surge can take both. If that matters later, add cloud storage as a second destination (`ALVO_BACKUP_REMOTE` accepts any rclone remote); nothing else changes.
 
-1. On your own computer: `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
-2. Create a bucket at your object-storage provider and an **application key limited to that bucket** (write and list; no delete if the provider allows it). Configure it on the Pi with `rclone config` (root's config file, mode 600).
-3. Set a lifecycle rule on the bucket for retention (target: 7 daily, 4 weekly, 6 monthly; at least keep 35 days). Enabling Object Lock or versioning protects against a compromised Pi deleting backups.
-4. Schedule it (systemd timer or cron, as root):
+One-time setup:
 
-```
-ALVO_BACKUP_AGE_RECIPIENT=age1... \
-ALVO_BACKUP_REMOTE=alvo-backups:<bucket>/db \
-/opt/alvo/ops/backup/backup.sh
-```
+1. **Key pair for encryption (on your own computer).** `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
+2. **Backup folder on the Pi (as root).**
+   ```
+   sudo install -d -m 750 -o root -g root /var/backups/alvo
+   sudo useradd --system --create-home --shell /usr/sbin/nologin alvo-backup-reader
+   sudo setfacl -m u:alvo-backup-reader:rx /var/backups/alvo   # read-only access to the folder
+   ```
+   (Install `acl` if `setfacl` is missing. New files must also be readable: `sudo setfacl -d -m u:alvo-backup-reader:r /var/backups/alvo`.)
+3. **Read-only SSH key for the home computer.** Generate a key pair on the home computer (`ssh-keygen -t ed25519 -f alvo-backup-pull`), and put the public half in `/home/alvo-backup-reader/.ssh/authorized_keys` on the Pi with the options `restrict` in front of it (no shell, no forwarding). The reader user can only read the folder above, because of the file permissions.
+4. **Schedule on the Pi (systemd timer or cron, as root), every 6 hours:**
+   ```
+   ALVO_BACKUP_AGE_RECIPIENT=age1... \
+   ALVO_BACKUP_REMOTE=/var/backups/alvo \
+   ALVO_BACKUP_KEEP_DAYS=14 \
+   /opt/alvo/ops/backup/backup.sh
+   ```
+5. **Schedule on the home computer** (Windows Task Scheduler, every 6 hours, only while it is on): `rclone copy` from the Pi's folder to a local folder, using an rclone SFTP remote with the key from step 3. Restrict the key file to your user. If the computer is off for a while, nothing is lost: the Pi keeps 14 days of backups and the next run catches up.
 
-The script refuses a suspiciously small dump, uploads nothing on failure, and records `/var/lib/alvo-backup/last-success` (the deploy step in the next slice will refuse to deploy without a fresh backup).
+The script refuses a suspiciously small dump, uploads nothing on failure, prunes old files only after the new one is stored, and records `/var/lib/alvo-backup/last-success` (the deploy step in the next slice will refuse to deploy without a fresh backup).
 
 **Restore drill (do it before launch, then every quarter).** Never practise on production. Use a scratch stack, for example the development stack on your computer:
 
 ```
-# download one backup file from the bucket, then:
+# copy one backup file from your pulled folder, then:
 ALVO_BACKUP_AGE_IDENTITY=/path/to/alvo-backup.key \
   ops/backup/restore-drill.sh alvo-20260101T020000Z.dump.age
 ```
@@ -105,7 +116,7 @@ Targets: RPO 6 hours on the microSD card (24 hours once the database is on an SS
 
 ### What was verified, and how
 
-On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was run against the development database: the encrypted file started with the age header and contained no plaintext, the drill restored 10 tables at schema version 0005, a wrong key failed cleanly, and the live database was untouched. The upload step was replaced by a copy to a local folder, so **rclone against a real bucket has not been tested**. Do that during step 5.2.
+On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was run against the development database: the encrypted file started with the age header and contained no plaintext, the drill restored 10 tables at schema version 0005, a wrong key failed cleanly, and the live database was untouched. The copy to the backup folder was done by a stand-in for `rclone`, so **real rclone (local folder, pruning with `--min-age`/`--include`, and the SFTP pull from the home computer) has not been tested**. Do that during the first setup.
 
 ## Not done yet (do not tell anyone the system is production-ready)
 

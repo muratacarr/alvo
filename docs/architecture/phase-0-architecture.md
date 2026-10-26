@@ -133,10 +133,11 @@ ASVS 5.0.0 Level 2 target, mapped per chapter during each slice (see `docs/secur
 | 1A-1 | Repo tooling: git init, ruff/mypy/pytest, pre-commit with Gitleaks, `.env.example`, settings validator | placeholder secrets rejected at startup; scanner flags fake key in fixture | low |
 | 1A-2 | `ci.yml` (SHA-pinned actions, read-only perms, zizmor/actionlint, gitleaks, pip-audit, trivy) | workflow lint passes; PR from fork has no secrets | med |
 | 1A-3 | PostgreSQL + Alembic + test DB; ARM64 image build + non-prod Compose smoke | `/health/ready` with and without DB; DB not published | med |
-| 1B | IdentityProvider port, mock adapter (test only), sessions, CSRF, logout | fixation, rotation, CSRF negative, mock unreachable in prod | high |
+| 1B-1 | Mock identity (dev only), server-side sessions, CSRF, logout (DONE) | fixation, rotation, CSRF negative, mock unreachable in prod | high |
+| 1B-2 | Roles and default-deny AI entitlements: admin-only grants per feature (`llm`, `stt`, `tts`), per-user limits or `exempt`, audit; host-side admin bootstrap command; no provider calls | new user denied everywhere, non-admin cannot grant, exempt keeps global caps, no self-promotion | high |
 | 1C | Projects/modules/topics/items CRUD | two-user matrix, parent-child mismatch, mass assignment | high |
 | 1D | JSON schema, preview, ADD_NEW_ONLY commit, export | re-import yields zero new, race test, oversize/deep JSON | high |
 | 1E | PWA shell, project dashboard | a11y, mobile breakpoints, XSS rendering | med |
 | 1F | Production release subphase (Pi hardening, ingress, backups, `release.yml`) | separate explicit approval | high |
 | 2A-2C | Reading/TTS/writing; speaking modes; FSRS review | see spec section 11 | med |
-| 3 | Paid speech behind BudgetGuard | the 10 cost-security tests | high |
+| 3 | `BudgetGuard` + DeepSeek (LLM) and OpenAI (STT/TTS) adapters behind it, quotas, kill switch, user consent (ADR 0004) | the 10 cost-security tests, exempt-user bounds, DeepSeek disclosure | high |

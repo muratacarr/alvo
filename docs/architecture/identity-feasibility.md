@@ -30,3 +30,6 @@ Checked: 2026-10-26 against official OpenAI pages (listed below). Re-verify befo
 ## Impact
 
 Blocks Phase 1B only. Phase 1A, 1C-1E can proceed behind an `IdentityProvider` port with a non-production mock adapter that is unreachable in production configuration.
+
+## Update 2026-10-26
+Using users' ChatGPT subscriptions for AI was evaluated and dropped for the MVP: the documented plan-usage flow targets open-source and locally run tools, remote or paid apps need separate OpenAI approval, and the server cannot enforce a subscription it never sees. AI now runs on owner-funded provider keys with admin-granted limits (ADR 0004). A local open-source helper using the user's own plan remains a possible future option.

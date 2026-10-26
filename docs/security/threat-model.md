@@ -28,6 +28,7 @@ Browser <-> edge; edge <-> tunnel <-> origin; web <-> api; api <-> db; GitHub (p
 | T14 | Personal data/privacy (GDPR/KVKK) | Minimal data, deletion path, short audio retention, no content in logs | legal review needed before public users |
 | T15 | Prompt injection / unsafe AI output | Imported text is data; AI features disabled in MVP | n/a until Phase 3 |
 | T16 | Paid API cost abuse | See `ai-spend-threat-model.md` | provider billing lag |
+| T17 | Learner text processed by a third-country LLM provider (DeepSeek) | Consent and disclosure, minimization, no PII in prompts, per-user admin grant, provider can be disabled by the kill switch | Provider-side retention and legal access are outside our control |
 
 ## Public repository & secrets (summary of spec 0B)
 Controls: Gitleaks (pre-commit and CI full history), GitHub secret scanning + push protection (confirm plan coverage), migration/fixture credential tests, startup validator rejecting placeholders, `.env.example` placeholders only, secrets injected at runtime from root-owned files outside checkout. Leak response: revoke and rotate first, investigate, then history scrub if needed; runbook and drill in `docs/ops/secrets-management.md` (Phase 1A). Public-release gate audit before first public push. Until then the repo must stay local/private.

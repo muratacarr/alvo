@@ -6,6 +6,7 @@ placeholders or are too weak. This applies in every environment so that
 """
 
 import re
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
@@ -16,6 +17,8 @@ _PLACEHOLDER = re.compile(r"change_?me|your_|placeholder|example|todo|xxx", re.I
 _MIN_SESSION_SECRET_LENGTH = 32
 _MIN_DB_PASSWORD_LENGTH = 16
 _MIN_DISTINCT_CHARS = 10
+# Docker/Compose mount secrets as files here; absent on a developer machine.
+_RUNTIME_SECRETS_DIR = Path("/run/secrets")
 
 
 def _reject_placeholder(value: str, label: str) -> None:
@@ -29,6 +32,7 @@ class Settings(BaseSettings):
         env_file=".env",
         extra="ignore",
         hide_input_in_errors=True,
+        secrets_dir=_RUNTIME_SECRETS_DIR if _RUNTIME_SECRETS_DIR.is_dir() else None,
     )
 
     environment: Literal["development", "test", "production"]

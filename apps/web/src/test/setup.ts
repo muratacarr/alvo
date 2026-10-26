@@ -8,8 +8,10 @@ import { setCsrfToken } from "../api/client";
 HTMLCanvasElement.prototype.getContext = () => null;
 
 // Browser APIs Ant Design relies on that jsdom does not implement.
+// Tests run as a user who prefers reduced motion: Ant Design then skips animations, which
+// jsdom cannot finish (a closing dialog would otherwise stay in the document).
 window.matchMedia = (query: string): MediaQueryList => ({
-  matches: false,
+  matches: query.includes("prefers-reduced-motion"),
   media: query,
   onchange: null,
   addEventListener: () => undefined,

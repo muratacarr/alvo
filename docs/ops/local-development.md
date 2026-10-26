@@ -22,6 +22,15 @@ The API and the database are **not** published on the host. Everything the brows
 
 Sign in with any name on the development sign-in form (for example `alice`). Use a private window with another name to check that two users cannot see each other's data.
 
+## What you can do in the web app
+
+1. Sign in (development form), create a project.
+2. Click the project title to open it. On the left add **modules** and **topics**; click a topic (mouse, or Tab to the tree, arrow keys and Enter) to see its items. The address keeps the chosen topic (`?topic=...`), so a link or a refresh returns to the same place.
+3. **Add item** opens a dialog (type, prompt, optional sample answer, translation, keywords, tags, difficulty). Editing sends only the fields you changed; clearing an optional field removes it. A duplicate (same type and prompt in the project) is explained and the dialog stays open.
+4. **Archive** an item; tick **Show archived items** to see archived ones. An archived project is read-only.
+
+Not in the app yet: renaming or archiving modules and topics, moving items, import and export screens (next slices).
+
 ## After pulling new code
 
 ```

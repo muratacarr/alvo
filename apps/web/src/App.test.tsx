@@ -91,6 +91,18 @@ describe("App", () => {
     await expectNoA11yViolations(container);
   });
 
+  it("opens a project at its own address", async () => {
+    const id = "22222222-2222-4222-8222-222222222222";
+    mockApi({
+      ...signedIn,
+      [`GET /api/v1/projects/${id}`]: { json: project({ id, title: "Deep linked" }) },
+      [`GET /api/v1/projects/${id}/modules`]: { json: { items: [], next_cursor: null } },
+      [`GET /api/v1/projects/${id}/topics`]: { json: { items: [], next_cursor: null } },
+    });
+    renderWithProviders(<App />, `/projects/${id}`);
+    expect(await screen.findByRole("heading", { name: "Deep linked" })).toBeInTheDocument();
+  });
+
   it("shows a helpful page for unknown addresses", async () => {
     mockApi(signedIn);
     renderWithProviders(<App />, "/no/such/page");

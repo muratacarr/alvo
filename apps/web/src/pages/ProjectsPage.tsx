@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Button, Checkbox, Form, Input, List, Tag, Typography } from "antd";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { ApiError, api } from "../api/client";
 import { describeError } from "../errors";
@@ -182,7 +183,9 @@ export function ProjectsPage() {
                 <div className="flex w-full flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <Typography.Title level={3} className="!mb-1 break-words !text-lg">
-                    {project.title}
+                    <Link to={`/projects/${project.id}`} className="text-indigo-800 underline">
+                      {project.title}
+                    </Link>
                   </Typography.Title>
                   {project.description && (
                     <Typography.Paragraph className="!mb-1 break-words">

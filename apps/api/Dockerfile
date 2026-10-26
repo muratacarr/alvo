@@ -1,6 +1,6 @@
 # Base images are pinned by multi-arch digest (linux/amd64 and linux/arm64 verified).
 # Update digests deliberately via a reviewed PR; never use mutable tags.
-FROM ghcr.io/astral-sh/uv:0.12.13@sha256:b485bd65cc2cf1c9a93b3554012c9c3778cf7b1b5fd3d3096ce9e1226c97e1e6 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.5@sha256:32a7bb39b496babbd997b0a39a4d66c126bdaf5661b302bf6f06abda8deca6ff AS uv
 
 FROM python:3.13-slim-trixie@sha256:d98cc29d3266e535dd9da1099688d9cb3ca4753813571e071763d17725460962 AS builder
 COPY --from=uv /uv /usr/local/bin/uv

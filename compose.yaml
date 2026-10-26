@@ -1,4 +1,4 @@
-# DEVELOPMENT stack. Production uses a separate, reviewed file (slice 1F).
+# DEVELOPMENT stack. Production uses compose.prod.yaml (see docs/ops/production-runbook.md).
 # First run:  python apps/api/scripts/make_dev_secrets.py
 #             docker compose up --build -d
 #             docker compose run --rm api alembic upgrade head

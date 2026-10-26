@@ -137,6 +137,15 @@ jobs:
           echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/hadolint"
       - run: '"$RUNNER_TEMP/hadolint" apps/api/Dockerfile apps/web/Dockerfile'
+      # ShellCheck is preinstalled on the GitHub-hosted runner image.
+      - name: Lint operations scripts
+        run: shellcheck ops/backup/*.sh
+      - name: Validate the production Compose file (placeholder values, nothing is started)
+        env:
+          ALVO_API_DIGEST: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ALVO_WEB_DIGEST: sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ALVO_PUBLIC_ORIGIN: https://alvo.invalid
+        run: docker compose -f compose.prod.yaml config -q
 
   image:
     name: ARM64 image (build, scan, compose smoke test)

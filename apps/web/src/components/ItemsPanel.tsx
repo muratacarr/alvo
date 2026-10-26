@@ -3,14 +3,17 @@ import { Alert, Button, Checkbox, List, Tag, Typography } from "antd";
 import { useState } from "react";
 
 import { api } from "../api/client";
-import type { ItemDto, PageDto } from "../api/types";
+import type { ItemDto, ModuleDto, PageDto, TopicDto } from "../api/types";
 import { describeError } from "../errors";
 import { ItemFormModal, type ItemPayload } from "./ItemFormModal";
+import { MoveItemModal, moveTargets } from "./MoveItemModal";
 
 interface Props {
   projectId: string;
   topicId: string | null;
   topicTitle: string | null;
+  modules: ModuleDto[];
+  topics: TopicDto[];
   readOnly: boolean;
 }
 
@@ -20,11 +23,13 @@ const LABEL_LENGTH = 60;
 /** Short, readable name for buttons, so screen readers say which item an action is for. */
 const clip = (text: string) => (text.length > LABEL_LENGTH ? `${text.slice(0, LABEL_LENGTH)}…` : text);
 
-export function ItemsPanel({ projectId, topicId, topicTitle, readOnly }: Props) {
+export function ItemsPanel({ projectId, topicId, topicTitle, modules, topics, readOnly }: Props) {
   const queryClient = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [dialog, setDialog] = useState<{ item: ItemDto | null } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [moving, setMoving] = useState<ItemDto | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   const items = useInfiniteQuery({
     queryKey: ["items", projectId, topicId, { showArchived }],
@@ -53,6 +58,17 @@ export function ItemsPanel({ projectId, topicId, topicTitle, readOnly }: Props) 
       await refresh();
     },
     onError: (error) => setSaveError(describeError(error, "Could not save the item. Please try again.")),
+  });
+
+  const move = useMutation({
+    mutationFn: ({ item, topic }: { item: ItemDto; topic: string }) =>
+      api.patch(`/api/v1/projects/${projectId}/items/${item.id}`, { topic_id: topic }),
+    onSuccess: async () => {
+      setMoving(null);
+      setMoveError(null);
+      await refresh();
+    },
+    onError: (error) => setMoveError(describeError(error, "Could not move the item. Please try again.")),
   });
 
   const archive = useMutation({
@@ -158,6 +174,17 @@ export function ItemsPanel({ projectId, topicId, topicTitle, readOnly }: Props) 
                     <Button aria-label={`Edit ${clip(entry.prompt)}`} onClick={() => openDialog(entry)}>
                       Edit
                     </Button>
+                    {moveTargets(entry, modules, topics).length > 0 && (
+                      <Button
+                        aria-label={`Move ${clip(entry.prompt)}`}
+                        onClick={() => {
+                          setMoveError(null);
+                          setMoving(entry);
+                        }}
+                      >
+                        Move
+                      </Button>
+                    )}
                     <Button
                       aria-label={`Archive ${clip(entry.prompt)}`}
                       onClick={() => archive.mutate(entry.id)}
@@ -191,6 +218,17 @@ export function ItemsPanel({ projectId, topicId, topicTitle, readOnly }: Props) 
         onCancel={() => setDialog(null)}
         onSubmit={(payload) => submit(dialog?.item ?? null, payload)}
       />
+      {moving && (
+        <MoveItemModal
+          item={moving}
+          modules={modules}
+          topics={topics}
+          error={moveError}
+          saving={move.isPending}
+          onCancel={() => setMoving(null)}
+          onSubmit={(topic) => move.mutate({ item: moving, topic })}
+        />
+      )}
     </section>
   );
 }

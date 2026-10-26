@@ -31,7 +31,9 @@ Sign in with any name on the development sign-in form (for example `alice`). Use
 
 5. **Import and export** (link next to the project title): download the sample file or the JSON schema, choose a JSON file (up to 2 MiB), **Preview import** to see what would be added, skipped as duplicates or rejected as invalid, then **Import**. Nothing is written until you confirm. Importing the same file twice adds nothing the second time. **Export this project** downloads everything in the same format.
 
-Not in the app yet: renaming or archiving modules and topics, moving items (next slices).
+6. **Manage modules and topics** (button above the tree): rename or archive a module or topic. Archiving asks first; archiving a module hides its topics and items, and there is no restore button yet. Each item has **Move** to put it in another topic (the dialog lists topics as `Module › Topic`; a duplicate in the target topic is explained).
+
+Not in the app yet: restoring archived modules/topics (the API has no restore either), reordering.
 
 ## After pulling new code
 

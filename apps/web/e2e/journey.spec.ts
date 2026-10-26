@@ -42,6 +42,25 @@ test("a user builds a project, exports it, imports a file and cannot be seen by 
   await page.getByRole("link", { name: "E2E interview" }).click();
   await expect(page.getByText("Core", { exact: true })).toBeVisible();
 
+  // Organise: rename a topic, move the item to another topic, archive the emptied topic.
+  await page.getByRole("button", { name: "Manage modules and topics" }).click();
+  await page.getByRole("button", { name: "Rename topic Dependency injection", exact: true }).click();
+  await page.getByLabel("New name").fill("DI basics");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "Rename topic DI basics" })).toBeVisible();
+
+  await page.getByRole("tree").getByText("DI basics", { exact: true }).click();
+  await page.getByRole("button", { name: "Move What is dependency injection?" }).click();
+  const moveDialog = page.getByRole("dialog", { name: "Move item" });
+  await moveDialog.getByRole("combobox", { name: "Move to topic" }).click();
+  await page.getByRole("option").first().click();
+  await moveDialog.getByRole("button", { name: "Move" }).click();
+  await expect(page.getByText(/No items in this topic yet/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Archive topic DI basics" }).click();
+  await page.getByRole("dialog", { name: "Archive topic" }).getByRole("button", { name: "Archive" }).click();
+  await expect(page.getByRole("button", { name: "Rename topic DI basics" })).toHaveCount(0);
+
   // Another user gets the same answer as for a project that does not exist.
   const context = await browser.newContext();
   const other = await context.newPage();

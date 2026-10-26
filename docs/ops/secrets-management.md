@@ -12,6 +12,8 @@ No values appear in this file. The repository is treated as public.
 1. Copy `.env.example` to `.env` (ignored by Git) and set real local-only values.
 2. Install the scanner: `winget install Gitleaks.Gitleaks` (Windows) and run `uv run --project apps/api pre-commit install`.
 
+Production secrets, the tunnel token and the backup key are described in `production-runbook.md`.
+
 ## Rotation (outline; expanded in the production-release subphase)
 Rotate the session secret (invalidates sessions), database password, OpenAI key, tunnel credential and backup key on a schedule and after any suspected exposure.
 

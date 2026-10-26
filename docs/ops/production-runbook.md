@@ -1,0 +1,127 @@
+# Production runbook (Raspberry Pi 5)
+
+Status: **slice 1F-1.** The production stack definition and the backup tooling exist and are tested. The stack cannot serve real users yet; see "Not done yet" at the end. Nothing in this file contains a secret.
+
+## What exists
+
+| Piece | File |
+|---|---|
+| Production stack (db, api, web, cloudflared) | `compose.prod.yaml` |
+| Encrypted off-device backup | `ops/backup/backup.sh` |
+| Restore drill (proves a backup works) | `ops/backup/restore-drill.sh` |
+
+The production file differs from the development one on purpose: images by digest only, no published ports (the only way in is the outbound Cloudflare Tunnel), secrets from root-owned files outside the checkout, no internet route for the API or database, no development sign-in. `apps/api/tests/security/test_compose_prod_policy.py` enforces all of it.
+
+## 1. Prepare the Pi (owner)
+
+Run these and keep the output for the next slice (no secrets in it):
+
+```
+uname -m; lsb_release -a; free -h; df -h; lsblk -f
+docker --version; docker compose version
+```
+
+- **Storage (decision D-6, 2026-10-27): the Pi runs from a 229 GB microSD card; the owner accepted this for now.** Constant database writes wear out SD cards, so treat the card as likely to fail someday and plan for it:
+  - Use a high-endurance card (or move to a USB 3 SSD later: stop the stack, move Docker's `data-root`, start it again).
+  - Back up **every 6 hours** instead of nightly (RPO 6 hours). The backup is the real safety net, so run a restore drill before launch.
+  - Mount the root filesystem with `noatime`, keep `journald` logs bounded, and never run swap on the card.
+  - Watch for early warnings: `sudo dmesg | grep -i -E 'mmc|i/o error'` and a filesystem that turns read-only mean "replace the card now".
+  - Keep a spare card flashed with Ubuntu and Docker, so recovery is: new card, install, restore the latest backup.
+- Install Docker from Docker's official apt repository (not `snap` and not Ubuntu's `docker.io`; the snap build restricts file access and breaks the secret and volume paths used here), and the host tools used by the backup: `age` and `rclone`.
+- Enable automatic security updates and a host firewall. Docker bypasses `ufw` for published ports; this stack publishes none, which is the real protection.
+
+## 2. Secrets (owner, on the Pi)
+
+Secrets live in `/etc/alvo/secrets`, readable only by root; the directory, not the file mode, keeps other users out (containers run as other uids and read the bind-mounted files).
+
+```
+sudo install -d -m 700 /etc/alvo/secrets
+cd /etc/alvo/secrets
+sudo sh -c 'umask 022; openssl rand -base64 24 | tr -d "\n=+/" > db_password'
+sudo sh -c 'umask 022; openssl rand -base64 48 | tr -d "\n" > alvo_session_secret'
+# alvo_database_url must contain the same password as db_password:
+#   postgresql+psycopg://alvo_app:<db_password>@db:5432/alvo
+# Create it with an editor, not with a command that puts the password into your shell history.
+# tunnel_token: the token from the Cloudflare dashboard (step 3).
+```
+
+Never paste these values into chat, issues, CI or a commit. Rotate them if they are ever exposed (see `secrets-management.md`).
+
+## 3. Cloudflare Tunnel (owner)
+
+1. Put the domain's **DNS** on Cloudflare (free plan). The owner's domain is registered at Namecheap and stays registered there: add the domain in Cloudflare, check that the imported DNS records are complete (especially any mail records, MX and TXT), then set the two Cloudflare nameservers in Namecheap (Domain List, Manage, Nameservers, Custom DNS). Wait until Cloudflare shows the domain as Active. Use a sub-domain such as `alvo.<your-domain>` for the app.
+2. Zero Trust dashboard, Networks, Tunnels: create a tunnel, choose the Docker connector, and copy only the **token** into `/etc/alvo/secrets/tunnel_token`.
+3. Add a public hostname (for example `alvo.<your-domain>`) with service type HTTP and URL `http://web:8080`.
+4. Set `ALVO_PUBLIC_ORIGIN=https://alvo.<your-domain>`. The API refuses to start in production with an `http://` origin.
+
+Traffic terminates at Cloudflare; this is the accepted trade-off for not opening any port at home (decision D-3).
+
+## 4. Starting the stack
+
+Needs the approved image digests from the release manifest (produced by the release workflow, a later slice):
+
+```
+export ALVO_PUBLIC_ORIGIN=https://alvo.<your-domain>
+export ALVO_API_DIGEST=sha256:<from the release manifest>
+export ALVO_WEB_DIGEST=sha256:<from the release manifest>
+docker compose -f compose.prod.yaml config -q      # fails if anything required is missing
+docker compose -f compose.prod.yaml up -d
+docker compose -f compose.prod.yaml run --rm api alembic upgrade head
+docker compose -f compose.prod.yaml ps             # every service should become healthy
+```
+
+`cloudflared` shows `unhealthy` while the tunnel is not connected.
+
+## 5. Backups
+
+**Design (decision D-4, 2026-10-27): the backup copy goes to a computer at home, and that computer pulls it.**
+
+- `backup.sh` runs `pg_dump`, encrypts it with the **public** age key and stores the file in `/var/backups/alvo` on the Pi (kept for 14 days). The Pi never holds the private key, so someone who steals the Pi or the files cannot read the backups.
+- Your home computer then **pulls** the files from the Pi with a read-only SSH key. The Pi has no key, password or address for the home computer, so a compromised Pi cannot reach it. The computer uses `copy`, never `sync`, so deleting files on the Pi cannot delete the copies.
+- Trade-off you accepted: both machines are in the same home. Fire, theft or a power surge can take both. If that matters later, add cloud storage as a second destination (`ALVO_BACKUP_REMOTE` accepts any rclone remote); nothing else changes.
+
+One-time setup:
+
+1. **Key pair for encryption (on your own computer).** `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
+2. **Backup folder on the Pi (as root).**
+   ```
+   sudo install -d -m 750 -o root -g root /var/backups/alvo
+   sudo useradd --system --create-home --shell /usr/sbin/nologin alvo-backup-reader
+   sudo setfacl -m u:alvo-backup-reader:rx /var/backups/alvo   # read-only access to the folder
+   ```
+   (Install `acl` if `setfacl` is missing. New files must also be readable: `sudo setfacl -d -m u:alvo-backup-reader:r /var/backups/alvo`.)
+3. **Read-only SSH key for the home computer.** Generate a key pair on the home computer (`ssh-keygen -t ed25519 -f alvo-backup-pull`), and put the public half in `/home/alvo-backup-reader/.ssh/authorized_keys` on the Pi with the options `restrict` in front of it (no shell, no forwarding). The reader user can only read the folder above, because of the file permissions.
+4. **Schedule on the Pi (systemd timer or cron, as root), every 6 hours:**
+   ```
+   ALVO_BACKUP_AGE_RECIPIENT=age1... \
+   ALVO_BACKUP_REMOTE=/var/backups/alvo \
+   ALVO_BACKUP_KEEP_DAYS=14 \
+   /opt/alvo/ops/backup/backup.sh
+   ```
+5. **Schedule on the home computer** (Windows Task Scheduler, every 6 hours, only while it is on): `rclone copy` from the Pi's folder to a local folder, using an rclone SFTP remote with the key from step 3. Restrict the key file to your user. If the computer is off for a while, nothing is lost: the Pi keeps 14 days of backups and the next run catches up.
+
+The script refuses a suspiciously small dump, uploads nothing on failure, prunes old files only after the new one is stored, and records `/var/lib/alvo-backup/last-success` (the deploy step in the next slice will refuse to deploy without a fresh backup).
+
+**Restore drill (do it before launch, then every quarter).** Never practise on production. Use a scratch stack, for example the development stack on your computer:
+
+```
+# copy one backup file from your pulled folder, then:
+ALVO_BACKUP_AGE_IDENTITY=/path/to/alvo-backup.key \
+  ops/backup/restore-drill.sh alvo-20260101T020000Z.dump.age
+```
+
+It restores into a temporary database, prints the table count and schema version, then drops it. A backup that has never been restored is not a backup.
+
+Targets: RPO 6 hours on the microSD card (24 hours once the database is on an SSD), RTO 4 hours. Schedule the backup every 6 hours.
+
+### What was verified, and how
+
+On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was run against the development database: the encrypted file started with the age header and contained no plaintext, the drill restored 10 tables at schema version 0005, a wrong key failed cleanly, and the live database was untouched. The copy to the backup folder was done by a stand-in for `rclone`, so **real rclone (local folder, pruning with `--min-age`/`--include`, and the SFTP pull from the home computer) has not been tested**. Do that during the first setup.
+
+## Not done yet (do not tell anyone the system is production-ready)
+
+- **Real sign-in method.** In production nobody can sign in (the development login is forbidden there). Decision D-1 is still open.
+- **Release workflow and deploy script** (build ARM64 images, publish by digest, SBOM and provenance, pull-based deploy with backup and disk checks): slice 1F-2.
+- **General and sign-in rate limiting** at the edge and in the API: slice 1F-3.
+- **Host facts** (D-6) and the first real start on the Pi, including an external port scan, reboot test, low-disk and tunnel-down behaviour.
+- **Provider calls and spend control** (BudgetGuard): Phase 3.

@@ -22,6 +22,11 @@ async function visitScreens(page: Page, visit: (label: string) => Promise<void>)
   await visit("projects");
   await buildSmallProject(page, "Layout check");
   await visit("project detail");
+  const manage = page.getByRole("button", { name: "Manage modules and topics" });
+  await manage.click();
+  await expect(page.getByRole("button", { name: "Rename module Core" })).toBeVisible();
+  await visit("management tools");
+  await manage.click();
   await page.getByRole("button", { name: "Add item" }).click();
   await expect(page.getByRole("dialog", { name: "Add item" })).toBeVisible();
   await visit("add item dialog");

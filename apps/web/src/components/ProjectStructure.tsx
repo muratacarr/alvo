@@ -98,8 +98,9 @@ export function ProjectStructure({
           <Typography.Paragraph>No modules yet. Add one below.</Typography.Paragraph>
         ) : (
           <Tree
-            // Re-created when modules change so every module starts expanded.
-            key={modules.map((m) => m.id).join(",")}
+            // Re-created when modules or topics change, so a new topic is never hidden inside a
+            // collapsed module (a module without topics starts out collapsed).
+            key={`${modules.map((m) => m.id).join(",")}|${topics.map((t) => t.id).join(",")}`}
             defaultExpandAll
             blockNode
             treeData={treeData}

@@ -75,6 +75,9 @@ export function ProjectDetailPage() {
             {project.data.title}
           </Typography.Title>
           {readOnly && <Tag>Archived</Tag>}
+          <Link to={`/projects/${projectId}/import`} className="text-sm font-medium text-indigo-800 underline">
+            Import and export
+          </Link>
         </div>
         {project.data.description && (
           <Typography.Paragraph className="mt-2 break-words">{project.data.description}</Typography.Paragraph>

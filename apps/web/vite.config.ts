@@ -1,7 +1,7 @@
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // The API is proxied under the same origin as the app, so the browser sends the exact
 // `Origin` the API checks and no CORS is needed. Start the API with
@@ -48,6 +48,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     css: false,
+    // Browser tests run with Playwright (npm run e2e), not here.
+    exclude: [...configDefaults.exclude, "e2e/**"],
     restoreMocks: true,
   },
 });

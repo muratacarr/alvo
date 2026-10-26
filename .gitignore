@@ -28,3 +28,7 @@ dist/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+
+# Playwright output (may contain page content)
+test-results/
+playwright-report/

@@ -86,4 +86,34 @@ describe("api client", () => {
     await api.get("/api/v1/projects", { limit: 20, cursor: "a b&c", include_archived: true });
     expect(calls[0]?.path).toBe("/api/v1/projects?limit=20&cursor=a+b%26c&include_archived=true");
   });
+
+  it("sends a raw text body untouched, with the CSRF token and extra headers", async () => {
+    const { calls } = mockApi({ "POST /api/v1/x/commit": { json: { ok: true } } });
+    setCsrfToken("tok");
+    const raw = '{"keep":  "spacing"}';
+    await api.postText("/api/v1/x/commit", raw, {
+      query: { ambiguous: "skip" },
+      headers: { "Idempotency-Key": "key-1" },
+    });
+    const [call] = calls;
+    expect(call?.path).toBe("/api/v1/x/commit?ambiguous=skip");
+    expect(call?.rawBody).toBe(raw);
+    expect(call?.headers["content-type"]).toBe("application/json");
+    expect(call?.headers["idempotency-key"]).toBe("key-1");
+    expect(call?.headers["x-csrf-token"]).toBe("tok");
+  });
+
+  it("downloads a file as a blob with cookies and no JSON parsing", async () => {
+    const { calls } = mockApi({ "GET /api/v1/projects/1/export": { json: { a: 1 } } });
+    const blob = await api.getBlob("/api/v1/projects/1/export");
+    expect(blob).toBeInstanceOf(Blob);
+    expect(await blob.text()).toBe('{"a":1}');
+    expect(calls[0]?.credentials).toBe("same-origin");
+  });
+
+  it("reports download failures like any other API error", async () => {
+    mockApi({ "GET /api/v1/projects/1/export": { status: 404, json: { error: "not_found" } } });
+    const error = (await api.getBlob("/api/v1/projects/1/export").catch((e: unknown) => e)) as ApiError;
+    expect(error).toMatchObject({ status: 404, code: "not_found" });
+  });
 });

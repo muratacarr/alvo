@@ -1,10 +1,19 @@
 import { vi } from "vitest";
 
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 export interface RecordedCall {
   method: string;
   path: string;
   headers: Record<string, string>;
   body: unknown;
+  rawBody: string | undefined;
   credentials: RequestCredentials | undefined;
 }
 
@@ -29,7 +38,8 @@ export function mockApi(routes: Record<string, Handler>): { calls: RecordedCall[
       method,
       path: url,
       headers,
-      body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+      body: typeof init?.body === "string" ? safeJson(init.body) : undefined,
+      rawBody: typeof init?.body === "string" ? init.body : undefined,
       credentials: init?.credentials,
     };
     calls.push(call);

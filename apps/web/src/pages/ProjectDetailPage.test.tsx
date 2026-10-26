@@ -177,12 +177,38 @@ describe("ProjectDetailPage: structure", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({ module_id: M2, title: "Conflict" });
   });
 
+  it("shows a new topic right away, even under a module that had no topics", async () => {
+    let created = false;
+    mockApi(
+      routes({
+        [`GET ${BASE}/modules`]: page([module_(M1, "Technical")]),
+        [`GET ${BASE}/topics`]: () => page(created ? [topic(T1, M1, "Fresh topic")] : []),
+        [`POST ${BASE}/topics`]: () => {
+          created = true;
+          return { status: 201, json: topic(T1, M1, "Fresh topic") };
+        },
+      }),
+    );
+    renderDetail();
+    await userEvent.click(await screen.findByRole("combobox", { name: "Module for the new topic" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Technical" }));
+    await userEvent.type(screen.getByLabelText("New topic title"), "Fresh topic{Enter}");
+    expect(await screen.findByText("Fresh topic")).toBeInTheDocument();
+  });
+
   it("requires a module and a title before adding a topic", async () => {
     const { calls } = mockApi(routes());
     renderDetail();
     await userEvent.type(await screen.findByLabelText("New topic title"), "Orphan{Enter}");
     expect(await screen.findByText("Choose a module first.")).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "POST")).toEqual([]);
+  });
+
+  it("links to the import and export screen of the project", async () => {
+    mockApi(routes());
+    renderDetail();
+    const link = await screen.findByRole("link", { name: "Import and export" });
+    expect(link).toHaveAttribute("href", `/projects/${PID}/import`);
   });
 
   it("explains an unknown project instead of showing an empty page", async () => {

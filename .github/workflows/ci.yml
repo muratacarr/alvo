@@ -222,3 +222,35 @@ jobs:
       - run: npm run build
       - run: npm run check:build
       - run: npm audit --audit-level=high
+  e2e:
+    name: Browser tests (Playwright against the Compose stack)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24.20.0"
+          package-manager-cache: false
+      - name: Start the stack (non-production, throwaway secrets)
+        run: |
+          set -euo pipefail
+          python3 apps/api/scripts/make_dev_secrets.py
+          docker compose up --build -d --wait --wait-timeout 180
+          docker compose run --rm api alembic upgrade head
+      - name: Install web dependencies and the test browser
+        working-directory: apps/web
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Run browser tests
+        working-directory: apps/web
+        run: npm run e2e
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 50
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

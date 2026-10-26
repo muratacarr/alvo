@@ -65,14 +65,22 @@ function toApiError(status: number, payload: unknown): ApiError {
   return new ApiError(status, "unknown_error");
 }
 
-async function request<T>(
-  method: string,
-  path: string,
-  body?: unknown,
-  query?: Query,
-): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+interface RequestOptions {
+  /** A value sent as JSON. */
+  body?: unknown;
+  /** Text sent exactly as given (used for files the server must parse itself). */
+  rawBody?: string;
+  query?: Query;
+  headers?: Record<string, string>;
+  /** "blob" returns the response as a file instead of parsing JSON. */
+  as?: "json" | "blob";
+}
+
+async function request<T>(method: string, path: string, options: RequestOptions = {}): Promise<T> {
+  const { body, rawBody, query, headers: extraHeaders, as = "json" } = options;
+  const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
+  const hasBody = body !== undefined || rawBody !== undefined;
+  if (hasBody) headers["Content-Type"] = "application/json";
   if (!SAFE_METHODS.has(method) && csrfToken !== null) headers["X-CSRF-Token"] = csrfToken;
 
   let response: Response;
@@ -81,12 +89,13 @@ async function request<T>(
       method,
       headers,
       credentials: "same-origin",
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
     });
   } catch {
     throw new ApiError(0, "network_error");
   }
 
+  if (response.ok && as === "blob") return (await response.blob()) as T;
   if (response.status === 204) return undefined as T;
 
   let payload: unknown = null;
@@ -103,8 +112,16 @@ async function request<T>(
 }
 
 export const api = {
-  get: <T>(path: string, query?: Query) => request<T>("GET", path, undefined, query),
-  post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
-  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
+  get: <T>(path: string, query?: Query) => request<T>("GET", path, { query }),
+  post: <T>(path: string, body?: unknown) => request<T>("POST", path, { body }),
+  patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, { body }),
   delete: <T>(path: string) => request<T>("DELETE", path),
+  /** POST text exactly as it is (an import file), with optional query and headers. */
+  postText: <T>(
+    path: string,
+    rawBody: string,
+    options: { query?: Query; headers?: Record<string, string> } = {},
+  ) => request<T>("POST", path, { rawBody, ...options }),
+  /** Fetch a file (an export or a template) as a Blob. */
+  getBlob: (path: string) => request<Blob>("GET", path, { as: "blob" }),
 };

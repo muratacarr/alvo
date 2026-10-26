@@ -13,6 +13,16 @@ const ProjectDetailPage = lazy(() =>
   import("./pages/ProjectDetailPage").then((module) => ({ default: module.ProjectDetailPage })),
 );
 
+const ImportPage = lazy(() =>
+  import("./pages/ImportPage").then((module) => ({ default: module.ImportPage })),
+);
+
+const loading = (
+  <p role="status" className="text-slate-700">
+    Loading…
+  </p>
+);
+
 export function App() {
   return (
     <Routes>
@@ -31,6 +41,14 @@ export function App() {
                 }
               >
                 <ProjectDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/projects/:projectId/import"
+            element={
+              <Suspense fallback={loading}>
+                <ImportPage />
               </Suspense>
             }
           />

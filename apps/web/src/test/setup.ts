@@ -32,6 +32,10 @@ globalThis.ResizeObserver = ResizeObserverStub;
 const originalGetComputedStyle = window.getComputedStyle.bind(window);
 window.getComputedStyle = (element: Element) => originalGetComputedStyle(element);
 
+// jsdom has no object URLs (used for file downloads); tests spy on these.
+URL.createObjectURL = () => "blob:jsdom";
+URL.revokeObjectURL = () => undefined;
+
 afterEach(() => {
   cleanup();
   setCsrfToken(null);

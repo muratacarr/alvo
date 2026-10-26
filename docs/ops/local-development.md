@@ -29,7 +29,9 @@ Sign in with any name on the development sign-in form (for example `alice`). Use
 3. **Add item** opens a dialog (type, prompt, optional sample answer, translation, keywords, tags, difficulty). Editing sends only the fields you changed; clearing an optional field removes it. A duplicate (same type and prompt in the project) is explained and the dialog stays open.
 4. **Archive** an item; tick **Show archived items** to see archived ones. An archived project is read-only.
 
-Not in the app yet: renaming or archiving modules and topics, moving items, import and export screens (next slices).
+5. **Import and export** (link next to the project title): download the sample file or the JSON schema, choose a JSON file (up to 2 MiB), **Preview import** to see what would be added, skipped as duplicates or rejected as invalid, then **Import**. Nothing is written until you confirm. Importing the same file twice adds nothing the second time. **Export this project** downloads everything in the same format.
+
+Not in the app yet: renaming or archiving modules and topics, moving items (next slices).
 
 ## After pulling new code
 
@@ -69,9 +71,25 @@ npm run dev          # http://localhost:5173, proxies /api to http://localhost:8
 
 This needs the API on port 8000 with `ALVO_PUBLIC_ORIGIN=http://localhost:5173`. The Docker route above is simpler and is what CI tests.
 
+## Browser tests (Playwright)
+
+They drive the real app in a real browser against the running stack: the full journey (create, export, import, second user cannot see it), no Content-Security-Policy violations, accessibility including color contrast, no sideways scrolling on a phone-sized screen, and a service worker that never stores API responses.
+
+```
+docker compose up --build -d
+docker compose run --rm api alembic upgrade head
+cd apps/web
+npm ci --ignore-scripts
+# once, if you do not want to use your installed Chrome: npx playwright install chromium
+PW_CHANNEL=chrome npm run e2e        # PowerShell: $env:PW_CHANNEL="chrome"; npm run e2e
+```
+
+Each run signs in with fresh random user names, so runs never see each other's data. CI runs the same tests (job `e2e`).
+
 ## Checks before opening a PR
 
 ```
 cd apps/api && uv run pytest -q && uv run ruff check . && uv run mypy src tests scripts alembic
 cd apps/web && npm run lint && npm run typecheck && npm test && npm run build && npm run check:build
+# with the stack running: cd apps/web && npm run e2e
 ```

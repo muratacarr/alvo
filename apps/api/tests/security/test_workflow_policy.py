@@ -105,6 +105,18 @@ def test_ci_checks_the_web_app() -> None:
     assert "npm audit --audit-level=high" in text
 
 
+def test_ci_runs_browser_tests_against_the_real_stack_without_secrets() -> None:
+    job = load("ci.yml")["jobs"]["e2e"]
+    text = "\n".join(str(step.get("run", "")) for step in job["steps"])
+    assert "docker compose up" in text
+    assert "alembic upgrade head" in text
+    assert "make_dev_secrets.py" in text  # throwaway values, never repository secrets
+    assert "npx playwright install" in text
+    assert "npm run e2e" in text
+    assert "--ignore-scripts" in text
+    assert "docker compose down" in text
+
+
 def test_web_dependencies_are_never_installed_with_scripts_or_without_a_lockfile() -> None:
     text = ci_text()
     assert "npm install" not in text

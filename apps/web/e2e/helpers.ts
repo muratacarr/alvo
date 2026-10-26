@@ -29,6 +29,8 @@ export async function buildSmallProject(page: Page, title: string): Promise<void
   await expect(page.getByText("Core", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Module for the new topic" }).click();
   await page.getByRole("option", { name: "Core" }).click();
+  // Wait for the list to finish closing so later checks never see it half open.
+  await expect(page.locator(".ant-select-dropdown")).toBeHidden();
   await page.getByLabel("New topic title").fill("Dependency injection");
   await page.getByLabel("New topic title").press("Enter");
   await page.getByText("Dependency injection", { exact: true }).click();

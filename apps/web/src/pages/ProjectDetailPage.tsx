@@ -7,6 +7,7 @@ import { fetchAll } from "../api/fetchAll";
 import type { ModuleDto, ProjectDto, TopicDto } from "../api/types";
 import { ItemsPanel } from "../components/ItemsPanel";
 import { ProjectStructure } from "../components/ProjectStructure";
+import { StructureManager } from "../components/StructureManager";
 import { describeError } from "../errors";
 
 export function ProjectDetailPage() {
@@ -108,6 +109,17 @@ export function ProjectDetailPage() {
         />
       )}
 
+      {!readOnly && (
+        <StructureManager
+          projectId={projectId}
+          modules={modules.data ?? []}
+          topics={topicList}
+          onTopicArchived={(id) => {
+            if (id === topicId) setParams({});
+          }}
+        />
+      )}
+
       <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <ProjectStructure
           projectId={projectId}
@@ -121,6 +133,8 @@ export function ProjectDetailPage() {
           projectId={projectId}
           topicId={topicId}
           topicTitle={selected?.title ?? null}
+          modules={modules.data ?? []}
+          topics={topicList}
           readOnly={readOnly}
         />
       </div>

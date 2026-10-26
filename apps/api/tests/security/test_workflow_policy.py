@@ -95,3 +95,44 @@ def test_ci_smoke_tests_the_compose_stack_and_checks_db_isolation() -> None:
 def test_downloaded_tool_binaries_are_checksum_verified() -> None:
     text = ci_text()
     assert text.count("sha256sum -c") >= text.count("curl -sSfL")
+
+
+def test_ci_checks_the_web_app() -> None:
+    text = ci_text()
+    for command in ("npm ci", "npm run lint", "npm run typecheck", "npm test", "npm run build"):
+        assert command in text, command
+    assert "npm run check:build" in text
+    assert "npm audit --audit-level=high" in text
+
+
+def test_web_dependencies_are_never_installed_with_scripts_or_without_a_lockfile() -> None:
+    text = ci_text()
+    assert "npm install" not in text
+    assert "--ignore-scripts" in text or "ignore-scripts=true" in text
+
+
+def test_node_setup_does_not_use_a_shared_cache() -> None:
+    steps = [
+        step
+        for job in load("ci.yml")["jobs"].values()
+        for step in job["steps"]
+        if str(step.get("uses", "")).startswith("actions/setup-node@")
+    ]
+    assert steps
+    for step in steps:
+        assert step["with"]["package-manager-cache"] is False
+
+
+def test_both_dockerfiles_are_linted_and_both_images_scanned() -> None:
+    text = ci_text()
+    assert "apps/web/Dockerfile" in text
+    assert "alvo-web" in text and text.count("trivy image") >= 2
+
+
+def test_dependabot_covers_every_ecosystem_with_a_cooldown() -> None:
+    config = yaml.safe_load((WORKFLOWS.parent / "dependabot.yml").read_text(encoding="utf-8"))
+    ecosystems = {u["package-ecosystem"] for u in config["updates"]}
+    assert {"github-actions", "npm", "docker"} <= ecosystems
+    assert "uv" in ecosystems or "pip" in ecosystems
+    for update in config["updates"]:
+        assert update["cooldown"]["default-days"] >= 3, update["package-ecosystem"]

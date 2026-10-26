@@ -1,0 +1,17 @@
+[Unit]
+Description=Alvo encrypted database backup
+Documentation=https://github.com/muratacarr/alvo/blob/main/docs/ops/production-runbook.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Holds only the age PUBLIC key and the destination folder (see the runbook); no secrets.
+EnvironmentFile=/etc/alvo/backup.env
+ExecStart=/opt/alvo/ops/backup/backup.sh
+TimeoutStartSec=30min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes

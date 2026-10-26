@@ -136,3 +136,27 @@ def test_dependabot_covers_every_ecosystem_with_a_cooldown() -> None:
     assert "uv" in ecosystems or "pip" in ecosystems
     for update in config["updates"]:
         assert update["cooldown"]["default-days"] >= 3, update["package-ecosystem"]
+
+
+def test_ci_does_not_depend_on_the_output_format_of_compose_port() -> None:
+    # Newer Compose versions print "invalid IP:0" for unpublished ports, not an empty string.
+    assert "docker compose port" not in ci_text()
+
+
+def test_ci_checks_real_port_bindings_of_the_api_and_database() -> None:
+    text = ci_text()
+    assert "NetworkSettings.Ports" in text
+    assert "compose ps -q" in text and "for service in api db" in text
+
+
+def test_downloads_in_ci_retry_transient_failures() -> None:
+    for line in ci_text().splitlines():
+        if "curl -sSfL" in line:
+            assert "--retry" in line, line.strip()
+
+
+def test_ci_smoke_checks_explain_what_failed() -> None:
+    # A bare `grep -q` or `test -z` under `set -e` fails silently; the checks must say why.
+    text = ci_text()
+    assert "web app shell missing" in text
+    assert "Content-Security-Policy header missing" in text

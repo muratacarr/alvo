@@ -44,7 +44,7 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
-          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 -o "$RUNNER_TEMP/gitleaks.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP/bin" gitleaks
@@ -67,7 +67,7 @@ jobs:
       - name: Install gitleaks
         run: |
           set -euo pipefail
-          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 -o "$RUNNER_TEMP/gitleaks.tgz" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/gitleaks.tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/gitleaks.tgz" -C "$RUNNER_TEMP/bin" gitleaks
@@ -113,7 +113,7 @@ jobs:
       - name: Install actionlint
         run: |
           set -euo pipefail
-          curl -sSfL -o "$RUNNER_TEMP/actionlint.tgz" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 -o "$RUNNER_TEMP/actionlint.tgz" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP/bin" actionlint
@@ -133,7 +133,7 @@ jobs:
       - name: Install hadolint
         run: |
           set -euo pipefail
-          curl -sSfL -o "$RUNNER_TEMP/hadolint" "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 -o "$RUNNER_TEMP/hadolint" "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
           echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/hadolint"
       - run: '"$RUNNER_TEMP/hadolint" apps/api/Dockerfile apps/web/Dockerfile'
@@ -151,7 +151,7 @@ jobs:
       - name: Install trivy
         run: |
           set -euo pipefail
-          curl -sSfL -o "$RUNNER_TEMP/trivy.tgz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-ARM64.tar.gz"
+          curl -sSfL --retry 5 --retry-all-errors --retry-delay 3 -o "$RUNNER_TEMP/trivy.tgz" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-ARM64.tar.gz"
           echo "${TRIVY_ARM64_SHA256}  $RUNNER_TEMP/trivy.tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/bin"
           tar -xzf "$RUNNER_TEMP/trivy.tgz" -C "$RUNNER_TEMP/bin" trivy
@@ -177,14 +177,21 @@ jobs:
           docker compose up --build -d --wait --wait-timeout 180
           docker compose run --rm api alembic upgrade head
           docker compose exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"
+
           # Everything the browser needs goes through the single web entrypoint.
           curl -fsS http://127.0.0.1:8080/healthz
-          curl -fsS http://127.0.0.1:8080/ | grep -q '<div id="root">'
-          curl -fsS -D - -o /dev/null http://127.0.0.1:8080/ | grep -qi '^content-security-policy:'
+          page=$(curl -fsS http://127.0.0.1:8080/)
+          grep -q 'id="root"' <<<"$page" || { echo "web app shell missing"; echo "$page" | head -20; exit 1; }
+          headers=$(curl -fsS -D - -o /dev/null http://127.0.0.1:8080/)
+          grep -qi '^content-security-policy:' <<<"$headers" || { echo "Content-Security-Policy header missing"; echo "$headers"; exit 1; }
           curl -fsS http://127.0.0.1:8080/api/v1/templates/import/v1/sample > /dev/null
-          # Neither the API nor the database may be published on the host.
-          test -z "$(docker compose port api 8000 2>/dev/null)"
-          test -z "$(docker compose port db 5432 2>/dev/null)"
+
+          # Neither the API nor the database may be published on the host. Inspect the real
+          # bindings: the output of Compose's port subcommand differs between versions.
+          for service in api db; do
+            bound=$(docker inspect --format '{{range $port, $bindings := .NetworkSettings.Ports}}{{if $bindings}}{{$port}} {{end}}{{end}}' "$(docker compose ps -q "$service")")
+            [ -z "$bound" ] || { echo "$service is published on the host: $bound"; exit 1; }
+          done
       - name: Show service logs on failure
         if: failure()
         run: docker compose logs --no-color --tail 50

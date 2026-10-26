@@ -56,7 +56,9 @@ if [ "$size" -lt "$min_bytes" ]; then
   exit 1
 fi
 
-rclone copyto "$file" "${ALVO_BACKUP_REMOTE%/}/$name"
+# The stored copy is readable by the folder's group (the read-only pull user), never by others.
+# The unencrypted work area above stays private.
+( umask 027; rclone copyto "$file" "${ALVO_BACKUP_REMOTE%/}/$name" )
 
 if [ -n "$keep_days" ]; then
   rclone delete --min-age "${keep_days}d" --include "alvo-*.dump.age" "${ALVO_BACKUP_REMOTE%/}"

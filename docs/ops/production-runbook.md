@@ -110,13 +110,14 @@ Then take the first backup right away (section 5) and run the restore drill. Fro
 One-time setup:
 
 1. **Key pair for encryption (on your own computer, not on the Pi).** Windows: `winget install FiloSottile.age`, then `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
-2. **Backup folder on the Pi (as root).**
+2. **Backup folder and read-only user on the Pi (as root).** A dedicated group may read the files; nobody else can.
    ```
-   sudo install -d -m 750 -o root -g root /var/backups/alvo
-   sudo useradd --system --create-home --shell /usr/sbin/nologin alvo-backup-reader
-   sudo setfacl -m u:alvo-backup-reader:rx /var/backups/alvo   # read-only access to the folder
+   sudo groupadd --system alvo-backup
+   sudo useradd --system --create-home --shell /usr/sbin/nologin --gid alvo-backup alvo-backup-reader
+   sudo chown root:alvo-backup /var/backups/alvo
+   sudo chmod 2750 /var/backups/alvo        # setgid: new files keep the group
    ```
-   (Install `acl` if `setfacl` is missing. New files must also be readable: `sudo setfacl -d -m u:alvo-backup-reader:r /var/backups/alvo`.)
+   New backups are written with mode 640 (owner root, group `alvo-backup`). Files created before this change (mode 600) need `sudo chgrp alvo-backup /var/backups/alvo/*.age && sudo chmod 640 /var/backups/alvo/*.age` once.
 3. **Read-only SSH key for the home computer.** Generate a key pair on the home computer (`ssh-keygen -t ed25519 -f alvo-backup-pull`), and put the public half in `/home/alvo-backup-reader/.ssh/authorized_keys` on the Pi with the options `restrict` in front of it (no shell, no forwarding). The reader user can only read the folder above, because of the file permissions.
 4. **Schedule on the Pi (systemd timer, every 6 hours at 02, 08, 14 and 20 o'clock).** The settings file holds only the PUBLIC key and a folder, no secrets:
    ```

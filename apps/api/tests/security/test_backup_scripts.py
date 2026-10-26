@@ -133,3 +133,11 @@ def test_nothing_is_pruned_when_the_upload_is_skipped_or_the_setting_is_invalid(
     bad = _run(_env(second, 5000, ALVO_BACKUP_KEEP_DAYS="0; rm -rf /"))
     assert bad.returncode == 2
     assert not (second / "rclone.log").exists()
+
+
+def test_stored_backups_are_group_readable_but_never_world_readable() -> None:
+    # The pull user is in a dedicated group; the work file stays private (umask 077 above).
+    text = BACKUP.read_text(encoding="utf-8")
+    assert "umask 027" in text
+    assert text.index("umask 077") < text.index("umask 027") < text.index("rclone copyto")
+    assert "umask 077" not in text.split("rclone copyto")[0].split("umask 027")[1]

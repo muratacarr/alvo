@@ -26,6 +26,17 @@ ReadinessProbe = Callable[[], bool]
 Clock = Callable[[], datetime]
 
 
+_DOCS_HELP = """
+**Trying write requests in Swagger UI (development only)**
+
+1. Run `POST /api/v1/auth/dev-login` with `{"subject": "alice"}`. The session cookie is
+   stored by the browser automatically.
+2. Copy `csrf_token` from the response, click **Authorize** and paste it into `CSRFToken`.
+3. State-changing requests (POST, PATCH, DELETE) can now be sent from this page.
+   The browser adds the required `Origin` header itself.
+"""
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -51,6 +62,7 @@ def create_app(
     docs_enabled = settings.environment != "production"
     app = FastAPI(
         title="Alvo API",
+        description=_DOCS_HELP if docs_enabled else "",
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
         openapi_url="/openapi.json" if docs_enabled else None,

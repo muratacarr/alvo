@@ -9,16 +9,20 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import sessionmaker
 
+from alvo.content.api import router as content_router
 from alvo.entitlements.api import build_router as build_entitlements_router
 from alvo.identity.api import build_router as build_identity_router
 from alvo.identity.application import IdentityService
 from alvo.identity.domain import SessionPolicy
+from alvo.projects.api import router as projects_router
 from alvo.shared.config import Settings
 from alvo.shared.db import create_db_engine, make_readiness_probe
 from alvo.shared.errors import ApiError
+from alvo.shared.http import BodySizeLimitMiddleware, PayloadTooLarge
 
 logger = logging.getLogger("alvo")
 
@@ -59,12 +63,26 @@ def create_app(
     app.state.session_factory = sessionmaker(engine, expire_on_commit=False)
     app.state.identity_service = identity_service
     app.state.settings = settings
+    app.state.clock = clock or _utc_now
     app.include_router(build_identity_router(settings, identity_service))
     app.include_router(build_entitlements_router(settings, identity_service))
+    app.include_router(projects_router)
+    app.include_router(content_router)
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
 
     @app.exception_handler(ApiError)
     async def api_error(request: Request, exc: ApiError) -> JSONResponse:
         return JSONResponse({"error": exc.code}, status_code=exc.status_code)
+
+    @app.exception_handler(PayloadTooLarge)
+    async def payload_too_large(request: Request, exc: PayloadTooLarge) -> JSONResponse:
+        return JSONResponse({"error": "payload_too_large"}, status_code=413)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+        # Report which fields failed, never the submitted values.
+        fields = [".".join(str(part) for part in err["loc"]) for err in exc.errors()]
+        return JSONResponse({"error": "invalid_request", "fields": fields}, status_code=422)
 
     @app.middleware("http")
     async def security_headers(

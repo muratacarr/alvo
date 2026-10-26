@@ -72,6 +72,13 @@ def require_csrf(
     return session
 
 
+def csrf_principal_dependency(
+    session: Annotated[AuthenticatedSession, Depends(require_csrf)],
+) -> Principal:
+    """For state-changing routes: the authenticated caller whose CSRF token checked out."""
+    return session.principal
+
+
 def require_admin_read(
     session: Annotated[AuthenticatedSession, Depends(require_session)],
 ) -> Principal:

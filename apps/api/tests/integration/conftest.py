@@ -1,14 +1,19 @@
 import os
 import secrets
 import shutil
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi.testclient import TestClient
 from testcontainers.community.postgres import PostgresContainer
+
+from alvo.main import create_app
+from tests.conftest import SettingsFactory
+from tests.integration.support import Actor, sign_in
 
 # Same digest as compose.yaml so tests exercise the version we deploy.
 POSTGRES_IMAGE = (
@@ -58,6 +63,28 @@ class FakeClock:
         self.current += timedelta(**kwargs)
 
 
+class TickingClock(FakeClock):
+    """Advances 1 ms on every read so rows created in sequence get distinct timestamps."""
+
+    def __call__(self) -> datetime:
+        self.current += timedelta(milliseconds=1)
+        return self.current
+
+
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
+
+
+@pytest.fixture
+def new_actor(migrated_database_url: str, settings_factory: SettingsFactory) -> Callable[[], Actor]:
+    """Create a fresh browser (own cookie jar) signed in as a brand-new user."""
+
+    ticking = TickingClock()
+
+    def build() -> Actor:
+        settings = settings_factory(database_url=migrated_database_url)
+        app = create_app(settings, readiness_probe=lambda: True, clock=ticking)
+        return sign_in(TestClient(app, base_url="https://testserver"))
+
+    return build

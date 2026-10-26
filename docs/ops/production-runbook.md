@@ -109,7 +109,7 @@ Then take the first backup right away (section 5) and run the restore drill. Fro
 
 One-time setup:
 
-1. **Key pair for encryption (on your own computer).** `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
+1. **Key pair for encryption (on your own computer, not on the Pi).** Windows: `winget install FiloSottile.age`, then `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
 2. **Backup folder on the Pi (as root).**
    ```
    sudo install -d -m 750 -o root -g root /var/backups/alvo
@@ -118,13 +118,20 @@ One-time setup:
    ```
    (Install `acl` if `setfacl` is missing. New files must also be readable: `sudo setfacl -d -m u:alvo-backup-reader:r /var/backups/alvo`.)
 3. **Read-only SSH key for the home computer.** Generate a key pair on the home computer (`ssh-keygen -t ed25519 -f alvo-backup-pull`), and put the public half in `/home/alvo-backup-reader/.ssh/authorized_keys` on the Pi with the options `restrict` in front of it (no shell, no forwarding). The reader user can only read the folder above, because of the file permissions.
-4. **Schedule on the Pi (systemd timer or cron, as root), every 6 hours:**
+4. **Schedule on the Pi (systemd timer, every 6 hours at 02, 08, 14 and 20 o'clock).** The settings file holds only the PUBLIC key and a folder, no secrets:
    ```
-   ALVO_BACKUP_AGE_RECIPIENT=age1... \
-   ALVO_BACKUP_REMOTE=/var/backups/alvo \
-   ALVO_BACKUP_KEEP_DAYS=14 \
-   /opt/alvo/ops/backup/backup.sh
+   sudo sh -c 'umask 022; printf "ALVO_BACKUP_AGE_RECIPIENT=age1...
+ALVO_BACKUP_REMOTE=/var/backups/alvo
+ALVO_BACKUP_KEEP_DAYS=14
+" > /etc/alvo/backup.env'
+   sudo cp /opt/alvo/ops/systemd/alvo-backup.service /opt/alvo/ops/systemd/alvo-backup.timer /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl start alvo-backup.service        # take the first backup now
+   sudo systemctl status alvo-backup.service       # should say "backup ok: alvo-....dump.age"
+   sudo systemctl enable --now alvo-backup.timer
+   systemctl list-timers alvo-backup.timer
    ```
+   Replace `age1...` with your real public key (it is not a secret). The units live in `ops/systemd/`.
 5. **Schedule on the home computer** (Windows Task Scheduler, every 6 hours, only while it is on): `rclone copy` from the Pi's folder to a local folder, using an rclone SFTP remote with the key from step 3. Restrict the key file to your user. If the computer is off for a while, nothing is lost: the Pi keeps 14 days of backups and the next run catches up.
 
 The script refuses a suspiciously small dump, uploads nothing on failure, prunes old files only after the new one is stored, and records `/var/lib/alvo-backup/last-success` (the deploy step in the next slice will refuse to deploy without a fresh backup).

@@ -10,7 +10,8 @@
 #   ALVO_BACKUP_AGE_RECIPIENT  age public key ("age1...")
 #   ALVO_BACKUP_REMOTE         rclone destination, e.g. "alvo-backups:my-bucket/db"
 # Optional:
-#   ALVO_COMPOSE               how to reach the stack (default: docker compose -f /opt/alvo/compose.prod.yaml)
+#   ALVO_COMPOSE               how to reach the stack (default: docker compose -p alvo, i.e. the running
+#                              project; the production Compose file itself needs release variables)
 #   ALVO_BACKUP_STATE_DIR      where the "last success" marker is written (default /var/lib/alvo-backup)
 #   ALVO_BACKUP_KEEP_DAYS      delete backups older than this many days from the destination, but
 #                              only after the new one was uploaded. Use it when the destination is
@@ -24,7 +25,7 @@ umask 077
 
 : "${ALVO_BACKUP_AGE_RECIPIENT:?set ALVO_BACKUP_AGE_RECIPIENT to the age public key}"
 : "${ALVO_BACKUP_REMOTE:?set ALVO_BACKUP_REMOTE to the rclone destination}"
-compose="${ALVO_COMPOSE:-docker compose -f /opt/alvo/compose.prod.yaml}"
+compose="${ALVO_COMPOSE:-docker compose -p alvo}"
 state_dir="${ALVO_BACKUP_STATE_DIR:-/var/lib/alvo-backup}"
 min_bytes=1024
 keep_days="${ALVO_BACKUP_KEEP_DAYS:-}"

@@ -150,6 +150,7 @@ def test_a_malformed_or_unlisted_manifest_is_refused_before_anything_runs(
     result = setup.run()
     assert result.returncode == 2
     assert setup.calls() == []
+    assert not result.stderr.strip().endswith(" 2")  # the exit code is not part of the message
 
 
 @needs_bash

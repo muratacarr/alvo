@@ -55,7 +55,7 @@ verify="${ALVO_VERIFY_ATTESTATIONS:-yes}"
 repo="muratacarr/alvo"
 workflow="${repo}/.github/workflows/release.yml"
 
-fail() { echo "deploy refused: $*" >&2; exit "${2:-1}"; }
+fail() { echo "deploy refused: $1" >&2; exit "${2:-1}"; }
 
 # 1. The manifest: strict shape, nothing else is accepted. -------------------------------
 [ -f "$manifest" ] || fail "manifest file not found" 2

@@ -245,3 +245,24 @@ def test_the_checked_out_stack_definition_must_match_the_release_commit(setup: S
     assert result.returncode != 0
     assert "checked-out" in result.stdout + result.stderr
     assert setup.calls() == []
+
+
+@needs_bash
+def test_the_very_first_deploy_may_skip_the_backup_check_only_when_nothing_was_deployed(
+    setup: Setup,
+) -> None:
+    (setup.backup_state / "last-success").unlink()
+    first = setup.run("--first")
+    assert first.returncode == 0, first.stderr
+    assert any("alembic upgrade head" in call for call in setup.calls())
+    # A second "first" deploy is refused: from now on a fresh backup is required.
+    again = setup.run("--first")
+    assert again.returncode == 2
+    assert "already" in again.stdout + again.stderr
+
+
+@needs_bash
+def test_first_and_rollback_cannot_be_combined(setup: Setup) -> None:
+    result = setup.run("--first", "--rollback")
+    assert result.returncode == 2
+    assert setup.calls() == []

@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     admin_recent_login_minutes: int = 15
     # Largest accepted request body in bytes (imports get their own, larger limit later).
     max_request_bytes: int = 1_048_576
+    # Import files are bigger than ordinary requests; they get their own cap.
+    max_import_bytes: int = 2_097_152
+    # Import commits one user may run per hour (rate limit for an expensive operation).
+    import_commits_per_hour: int = 30
     # Global ceilings for per-user AI limits an admin may grant. Zero means "grant nothing";
     # the owner raises them deliberately (see docs/security/api-spend-policy.md).
     ai_max_requests_per_day: int = 0
@@ -98,6 +102,10 @@ class Settings(BaseSettings):
             raise ValueError("session lifetimes must satisfy 0 < idle <= absolute")
         if not 1024 <= self.max_request_bytes <= 50 * 1024 * 1024:
             raise ValueError("max_request_bytes must be between 1 KiB and 50 MiB")
+        if not self.max_request_bytes <= self.max_import_bytes <= 50 * 1024 * 1024:
+            raise ValueError("max_import_bytes must be between max_request_bytes and 50 MiB")
+        if self.import_commits_per_hour < 1:
+            raise ValueError("import_commits_per_hour must be positive")
         if self.admin_recent_login_minutes <= 0:
             raise ValueError("admin_recent_login_minutes must be positive")
         if self.ai_max_requests_per_day < 0 or self.ai_max_monthly_units < 0:

@@ -25,6 +25,12 @@ class Actor:
     def post(self, path: str, json: Any = None) -> httpx.Response:
         return self.client.post(path, json=json, headers=self._headers())
 
+    def post_raw(
+        self, path: str, content: bytes, extra_headers: dict[str, str] | None = None
+    ) -> httpx.Response:
+        headers = {**self._headers(), "Content-Type": "application/json", **(extra_headers or {})}
+        return self.client.post(path, content=content, headers=headers)
+
     def patch(self, path: str, json: Any = None) -> httpx.Response:
         return self.client.patch(path, json=json, headers=self._headers())
 

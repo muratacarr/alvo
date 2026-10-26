@@ -9,9 +9,20 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from alvo.content.domain import ItemRecord, ModuleRecord, TopicRecord
+from alvo.content.domain import (
+    ApplyResult,
+    ContentPlan,
+    DedupeIndex,
+    ItemRecord,
+    ItemType,
+    ModuleRecord,
+    TopicRecord,
+    item_fingerprint,
+    loose_key,
+)
 from alvo.content.infrastructure import SqlContentStore
 from alvo.identity.domain import Principal
 from alvo.projects.application import require_project
@@ -199,8 +210,18 @@ def create_item(
     require_project(db, principal, project_id, writable=True)
     store = SqlContentStore(db)
     _live_topic(store, project_id, values["topic_id"])
-    item = store.create_item(project_id, values, now)
-    db.commit()
+    values = {
+        **values,
+        "fingerprint": item_fingerprint(ItemType(values["type"]), values["prompt"]),
+        "loose_key": loose_key(values["prompt"]),
+    }
+    try:
+        item = store.create_item(project_id, values, now)
+        db.commit()
+    except IntegrityError as exc:
+        # Same type and prompt (or external id) already exists in this project.
+        db.rollback()
+        raise ApiError(409, "duplicate") from exc
     return item
 
 
@@ -240,10 +261,25 @@ def update_item(
     store = SqlContentStore(db)
     if "topic_id" in changes:
         _live_topic(store, project_id, changes["topic_id"])
-    item = store.update_item(project_id, item_id, changes, now)
+    current = store.get_item(project_id, item_id)
+    if current is None:
+        raise _not_found()
+    if "prompt" in changes or "type" in changes:
+        new_type = ItemType(changes.get("type", current.type))
+        new_prompt = changes.get("prompt", current.prompt)
+        changes = {
+            **changes,
+            "fingerprint": item_fingerprint(new_type, new_prompt),
+            "loose_key": loose_key(new_prompt),
+        }
+    try:
+        item = store.update_item(project_id, item_id, changes, now)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ApiError(409, "duplicate") from exc
     if item is None:
         raise _not_found()
-    db.commit()
     return item
 
 
@@ -254,3 +290,25 @@ def archive_item(
     if not SqlContentStore(db).archive_item(project_id, item_id, now):
         raise _not_found()
     db.commit()
+
+
+# bulk operations used by the imports module -------------------------------------------------
+
+
+def load_dedupe_index(db: Session, project_id: UUID) -> DedupeIndex:
+    """Read model for duplicate detection. The caller must already have checked ownership."""
+    return SqlContentStore(db).load_dedupe_index(project_id)
+
+
+def apply_content_plan(
+    db: Session, project_id: UUID, plan: ContentPlan, now: datetime
+) -> ApplyResult:
+    """Write a planned import. The caller owns the transaction (commit or roll back)."""
+    return SqlContentStore(db).apply_plan(project_id, plan, now)
+
+
+def export_tree(
+    db: Session, project_id: UUID
+) -> list[tuple[ModuleRecord, list[tuple[TopicRecord, list[ItemRecord]]]]]:
+    """Live content of a project, ready to serialise. Ownership is the caller's job."""
+    return SqlContentStore(db).export_tree(project_id)

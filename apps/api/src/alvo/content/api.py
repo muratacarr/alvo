@@ -9,7 +9,15 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy.orm import Session
 
 from alvo.content import application
-from alvo.content.domain import ItemRecord, ItemType, ModuleRecord, TopicRecord
+from alvo.content.domain import (
+    EXTERNAL_ID_MAX,
+    EXTERNAL_ID_PATTERN,
+    ItemRecord,
+    ItemType,
+    ModuleRecord,
+    PracticeMode,
+    TopicRecord,
+)
 from alvo.identity.api import csrf_principal_dependency, get_db, principal_dependency, verify_origin
 from alvo.identity.domain import Principal
 from alvo.shared.http import get_now
@@ -27,6 +35,10 @@ Keywords = Annotated[list[Label], Field(max_length=30)]
 Tags = Annotated[list[Label], Field(max_length=30)]
 FollowUps = Annotated[list[Question], Field(max_length=10)]
 Difficulty = Annotated[int, Field(strict=True, ge=1, le=5)]
+ExternalId = Annotated[
+    str, StringConstraints(pattern=EXTERNAL_ID_PATTERN, max_length=EXTERNAL_ID_MAX)
+]
+PracticeModes = Annotated[list[PracticeMode], Field(max_length=len(PracticeMode))]
 
 
 # request bodies ---------------------------------------------------------------------------
@@ -65,10 +77,20 @@ class ItemCreate(BaseModel):
     tags: Tags = Field(default_factory=list)
     follow_up_questions: FollowUps = Field(default_factory=list)
     difficulty: Difficulty | None = None
+    external_id: ExternalId | None = None
+    practice_modes: PracticeModes = Field(default_factory=list)
 
 
 class ItemUpdate(PatchModel):
-    not_nullable = ("topic_id", "type", "prompt", "keywords", "tags", "follow_up_questions")
+    not_nullable = (
+        "topic_id",
+        "type",
+        "prompt",
+        "keywords",
+        "tags",
+        "follow_up_questions",
+        "practice_modes",
+    )
     topic_id: UUID | None = None
     type: ItemType | None = None
     prompt: Prompt | None = None
@@ -78,6 +100,7 @@ class ItemUpdate(PatchModel):
     tags: Tags | None = None
     follow_up_questions: FollowUps | None = None
     difficulty: Difficulty | None = None
+    practice_modes: PracticeModes | None = None
 
 
 # responses ---------------------------------------------------------------------------------
@@ -114,6 +137,8 @@ class ItemOut(BaseModel):
     tags: list[str]
     follow_up_questions: list[str]
     difficulty: int | None
+    external_id: str | None
+    practice_modes: list[str]
     archived: bool
     created_at: datetime
     updated_at: datetime
@@ -155,6 +180,8 @@ def item_out(i: ItemRecord) -> ItemOut:
         tags=i.tags,
         follow_up_questions=i.follow_up_questions,
         difficulty=i.difficulty,
+        external_id=i.external_id,
+        practice_modes=i.practice_modes,
         archived=i.archived,
         created_at=i.created_at,
         updated_at=i.updated_at,

@@ -18,6 +18,7 @@ from alvo.entitlements.api import build_router as build_entitlements_router
 from alvo.identity.api import build_router as build_identity_router
 from alvo.identity.application import IdentityService
 from alvo.identity.domain import SessionPolicy
+from alvo.imports.api import router as imports_router
 from alvo.projects.api import router as projects_router
 from alvo.shared.config import Settings
 from alvo.shared.db import create_db_engine, make_readiness_probe
@@ -80,11 +81,17 @@ def create_app(
     app.include_router(build_entitlements_router(settings, identity_service))
     app.include_router(projects_router)
     app.include_router(content_router)
-    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
+    app.include_router(imports_router)
+    app.add_middleware(
+        BodySizeLimitMiddleware,
+        max_bytes=settings.max_request_bytes,
+        large_suffixes=("/imports/preview", "/imports/commit"),
+        large_max_bytes=settings.max_import_bytes,
+    )
 
     @app.exception_handler(ApiError)
     async def api_error(request: Request, exc: ApiError) -> JSONResponse:
-        return JSONResponse({"error": exc.code}, status_code=exc.status_code)
+        return JSONResponse({"error": exc.code, **exc.extra}, status_code=exc.status_code)
 
     @app.exception_handler(PayloadTooLarge)
     async def payload_too_large(request: Request, exc: PayloadTooLarge) -> JSONResponse:

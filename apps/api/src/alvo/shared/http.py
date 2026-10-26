@@ -28,21 +28,35 @@ class BodySizeLimitMiddleware:
     counted too, so chunked uploads cannot bypass the limit.
     """
 
-    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_bytes: int,
+        large_suffixes: tuple[str, ...] = (),
+        large_max_bytes: int | None = None,
+    ) -> None:
         self.app = app
         self.max_bytes = max_bytes
+        self.large_suffixes = large_suffixes
+        self.large_max_bytes = large_max_bytes or max_bytes
+
+    def _limit_for(self, path: str) -> int:
+        if self.large_suffixes and path.endswith(self.large_suffixes):
+            return self.large_max_bytes
+        return self.max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        limit = self._limit_for(scope["path"])
         for name, value in scope["headers"]:
             if name == b"content-length":
                 try:
                     declared = int(value)
                 except ValueError:
-                    declared = self.max_bytes + 1
-                if declared > self.max_bytes:
+                    declared = limit + 1
+                if declared > limit:
                     await self._reject(send)
                     return
         received = 0
@@ -52,7 +66,7 @@ class BodySizeLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes:
+                if received > limit:
                     raise PayloadTooLarge
             return message
 

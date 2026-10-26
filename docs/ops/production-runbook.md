@@ -1,6 +1,6 @@
 # Production runbook (Raspberry Pi 5)
 
-Status: **slice 1F-1.** The production stack definition and the backup tooling exist and are tested. The stack cannot serve real users yet; see "Not done yet" at the end. Nothing in this file contains a secret.
+Status: **slices 1F-1 and 1F-2.** The production stack definition and the backup tooling exist and are tested. The stack cannot serve real users yet; see "Not done yet" at the end. Nothing in this file contains a secret.
 
 ## What exists
 
@@ -9,6 +9,8 @@ Status: **slice 1F-1.** The production stack definition and the backup tooling e
 | Production stack (db, api, web, cloudflared) | `compose.prod.yaml` |
 | Encrypted off-device backup | `ops/backup/backup.sh` |
 | Restore drill (proves a backup works) | `ops/backup/restore-drill.sh` |
+| Release (build, publish, attest) | `.github/workflows/release.yml` |
+| Deploy and rollback on the Pi | `ops/deploy/deploy.sh` |
 
 The production file differs from the development one on purpose: images by digest only, no published ports (the only way in is the outbound Cloudflare Tunnel), secrets from root-owned files outside the checkout, no internet route for the API or database, no development sign-in. `apps/api/tests/security/test_compose_prod_policy.py` enforces all of it.
 
@@ -56,21 +58,40 @@ Never paste these values into chat, issues, CI or a commit. Rotate them if they 
 
 Traffic terminates at Cloudflare; this is the accepted trade-off for not opening any port at home (decision D-3).
 
-## 4. Starting the stack
+## 4. Releasing and deploying
 
-Needs the approved image digests from the release manifest (produced by the release workflow, a later slice):
+Two separate steps, on purpose: **GitHub builds and publishes** (after you approve), and **you deploy by hand on the Pi**. GitHub never holds a key to the Pi and nothing can push a change onto it.
+
+### One-time GitHub setup (owner)
+1. Settings, Environments, New environment `production`: tick **Required reviewers** and add yourself. A release run then waits for your approval before it publishes anything. Under "Deployment branches" allow only `main`.
+2. After the first release, open each package (`alvo-api`, `alvo-web`) under your profile's Packages, Package settings, and set visibility to **Public**. The images contain no secrets (the repository is public too), and this lets the Pi pull them without storing any token.
+
+### One-time Pi setup (owner)
+- Put the repository on the Pi: `sudo git clone https://github.com/muratacarr/alvo.git /opt/alvo`.
+- Install the GitHub CLI (`gh`) from GitHub's official apt instructions. The deploy script uses it to verify image attestations; no login is needed because the repository is public.
+- Create `/etc/alvo/deploy.env` (mode 644, root) containing one line: `ALVO_PUBLIC_ORIGIN=https://alvo.<your-domain>`.
+
+### Each release
+1. Merge to `main` as usual (CI green).
+2. Actions, **Release**, Run workflow (branch `main`). Approve the run when GitHub asks. It builds the two ARM64 images natively, publishes them tagged with the commit, signs provenance attestations, and produces the artifact `release-manifest` (commit and the two image digests; also shown in the run summary).
+3. Download `release-manifest.json` and copy it to the Pi (for example `scp`).
+4. On the Pi:
+   ```
+   sudo git -C /opt/alvo fetch && sudo git -C /opt/alvo checkout <commit from the manifest>
+   sudo /opt/alvo/ops/deploy/deploy.sh /path/to/release-manifest.json
+   ```
+   The script refuses unless: the manifest has exactly the expected shape, both images carry an attestation made by this repository's release workflow, the checked-out commit equals the release commit, all secrets exist, the last backup is under 8 hours old, and there is enough disk space. It then pulls by digest, runs the database migrations **before** starting anything new (a failed migration leaves the old version running), starts the stack, waits for health, runs two smoke checks, and records the release in `/var/lib/alvo-deploy`.
+
+### Rollback
+Images roll back by redeploying the previous release; the database is not rolled back (migrations are forward-only, written as expand-then-contract, and a restore from backup is the last resort).
 
 ```
-export ALVO_PUBLIC_ORIGIN=https://alvo.<your-domain>
-export ALVO_API_DIGEST=sha256:<from the release manifest>
-export ALVO_WEB_DIGEST=sha256:<from the release manifest>
-docker compose -f compose.prod.yaml config -q      # fails if anything required is missing
-docker compose -f compose.prod.yaml up -d
-docker compose -f compose.prod.yaml run --rm api alembic upgrade head
-docker compose -f compose.prod.yaml ps             # every service should become healthy
+sudo git -C /opt/alvo checkout <previous commit>
+sudo /opt/alvo/ops/deploy/deploy.sh --rollback /var/lib/alvo-deploy/previous.json
 ```
 
-`cloudflared` shows `unhealthy` while the tunnel is not connected.
+### First start on a new Pi
+Do the secrets and tunnel steps above first, then run the first release exactly as described. `docker compose -f compose.prod.yaml ps` should show every service healthy; `cloudflared` shows `unhealthy` while the tunnel is not connected.
 
 ## 5. Backups
 
@@ -121,7 +142,7 @@ On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was
 ## Not done yet (do not tell anyone the system is production-ready)
 
 - **Real sign-in method.** In production nobody can sign in (the development login is forbidden there). Decision D-1 is still open.
-- **Release workflow and deploy script** (build ARM64 images, publish by digest, SBOM and provenance, pull-based deploy with backup and disk checks): slice 1F-2.
+- **The release workflow and the deploy script have never run for real.** Their logic is tested with stand-ins, and the workflow is linted, but the first real release, the attestation check (`gh attestation verify`), pulling from GHCR and the first start on the Pi are unverified until you do them (slice 1F-2 ships the tools, not the proof).
 - **General and sign-in rate limiting** at the edge and in the API: slice 1F-3.
 - **Host facts** (D-6) and the first real start on the Pi, including an external port scan, reboot test, low-disk and tunnel-down behaviour.
 - **Provider calls and spend control** (BudgetGuard): Phase 3.

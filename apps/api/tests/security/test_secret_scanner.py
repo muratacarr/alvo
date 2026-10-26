@@ -1,5 +1,6 @@
 """The secret scanner must flag realistic credentials and pass clean files."""
 
+import os
 import shutil
 import subprocess  # noqa: S404
 from pathlib import Path
@@ -9,8 +10,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 CONFIG = REPO_ROOT / ".gitleaks.toml"
 
+# Locally the tests skip without gitleaks; in CI a missing scanner must fail, not skip.
 pytestmark = pytest.mark.skipif(
-    shutil.which("gitleaks") is None, reason="gitleaks not installed (CI must install it)"
+    shutil.which("gitleaks") is None and not os.environ.get("CI"),
+    reason="gitleaks not installed",
 )
 
 

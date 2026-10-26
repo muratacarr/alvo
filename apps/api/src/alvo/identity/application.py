@@ -33,6 +33,7 @@ class SignedIn:
 class AuthenticatedSession:
     principal: Principal
     csrf_token: str
+    session_created_at: datetime
 
 
 class IdentityService:
@@ -40,6 +41,9 @@ class IdentityService:
         self._secret = secret
         self._policy = policy
         self._clock = clock
+
+    def now(self) -> datetime:
+        return self._clock()
 
     def sign_in(
         self, db: Session, identity: VerifiedIdentity, presented_token: str | None
@@ -69,8 +73,11 @@ class IdentityService:
         if now - session.last_seen_at >= _TOUCH_INTERVAL:
             store.touch(session.id, now)
             db.commit()
+        role = store.get_role(session.user_id)  # read every request: demotion is immediate
         return AuthenticatedSession(
-            Principal(session.user_id), csrf_token_for(self._secret, token_hash)
+            Principal(session.user_id, role),
+            csrf_token_for(self._secret, token_hash),
+            session.created_at,
         )
 
     def sign_out(self, db: Session, token: str) -> None:

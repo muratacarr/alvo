@@ -7,7 +7,7 @@ from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, select, u
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
-from alvo.identity.domain import SessionRecord
+from alvo.identity.domain import Role, SessionRecord
 from alvo.shared.orm import Base
 
 
@@ -19,6 +19,7 @@ class UserRow(Base):
     provider: Mapped[str] = mapped_column(String(32))
     subject: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    role: Mapped[str] = mapped_column(String(16), server_default="user")
 
 
 class SessionRow(Base):
@@ -56,6 +57,23 @@ class SqlIdentityStore:
         return self._db.execute(
             select(UserRow.id).where(UserRow.provider == provider, UserRow.subject == subject)
         ).scalar_one()
+
+    def user_exists(self, user_id: UUID) -> bool:
+        found = self._db.execute(select(UserRow.id).where(UserRow.id == user_id)).first()
+        return found is not None
+
+    def get_role(self, user_id: UUID) -> Role:
+        role = self._db.execute(select(UserRow.role).where(UserRow.id == user_id)).scalar_one()
+        return "admin" if role == "admin" else "user"
+
+    def set_role(self, provider: str, subject: str, role: Role) -> bool:
+        """Change the role of an existing user; returns False when the user does not exist."""
+        result = self._db.execute(
+            update(UserRow)
+            .where(UserRow.provider == provider, UserRow.subject == subject)
+            .values(role=role)
+        )
+        return bool(result.rowcount)  # type: ignore[attr-defined]
 
     def create_session(self, user_id: UUID, token_hash: str, now: datetime) -> SessionRecord:
         row = SessionRow(

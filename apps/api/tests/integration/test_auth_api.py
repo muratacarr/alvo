@@ -3,7 +3,6 @@
 import logging
 import re
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -13,28 +12,13 @@ from sqlalchemy import create_engine, text
 
 from alvo.main import create_app
 from tests.conftest import SettingsFactory
+from tests.integration.conftest import FakeClock
 
 COOKIE = "__Host-alvo_session"
 ORIGIN = {"Origin": "https://testserver"}
 LOGIN = "/api/v1/auth/dev-login"
 ME = "/api/v1/auth/me"
 LOGOUT = "/api/v1/auth/logout"
-
-
-class FakeClock:
-    def __init__(self) -> None:
-        self.current = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        return self.current
-
-    def advance(self, **kwargs: float) -> None:
-        self.current += timedelta(**kwargs)
-
-
-@pytest.fixture
-def clock() -> FakeClock:
-    return FakeClock()
 
 
 @pytest.fixture
@@ -81,7 +65,7 @@ def test_authenticated_request_returns_the_user(client: TestClient) -> None:
     body = login(client)
     me = client.get(ME)
     assert me.status_code == 200
-    assert me.json() == {"user_id": body["user_id"]}
+    assert me.json() == {"user_id": body["user_id"], "role": "user"}
 
 
 def test_session_token_is_never_stored_in_clear_text(
@@ -175,8 +159,8 @@ def test_each_user_only_sees_their_own_identity(
 ) -> None:
     alice, bob = make_client(), make_client()
     alice_id, bob_id = login(alice)["user_id"], login(bob)["user_id"]
-    assert alice.get(ME).json() == {"user_id": alice_id}
-    assert bob.get(ME).json() == {"user_id": bob_id}
+    assert alice.get(ME).json() == {"user_id": alice_id, "role": "user"}
+    assert bob.get(ME).json() == {"user_id": bob_id, "role": "user"}
 
 
 def test_idle_session_expires(client: TestClient, clock: FakeClock) -> None:

@@ -9,6 +9,12 @@
 - **D-5 Spend limits.** Is paid speech wanted at all in the near term? If yes, monthly USD ceilings.
 - **D-6 Pi facts**: SSD or microSD, current Ubuntu version, CGNAT status.
 
+## Updates 2026-10-26
+- **D-1 resolved for now:** development uses the mock identity adapter; the real sign-in method stays open. The goal of using users' ChatGPT subscriptions was dropped (ADR 0003 superseded by ADR 0004).
+- **D-5 refined:** paid AI is wanted (DeepSeek LLM, OpenAI STT/TTS). Still needed from the owner: per-feature default limits and the global monthly cap. Until set, every cap is 0.
+- **D-7 Admin bootstrap:** proposed as a host-side command run by the operator.
+- **D-8 DeepSeek data processing:** the owner must accept sending minimized learner text to a China-hosted provider with explicit user consent, and decide whether legal review (KVKK/GDPR) is required before enabling it.
+
 ## Assumptions
 Single owner and few users; Turkish/English UI language TBD (default: English UI); no offline mode in MVP.
 

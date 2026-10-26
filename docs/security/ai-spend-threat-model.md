@@ -25,3 +25,14 @@ Bounded by min(app global monthly cap, provider project hard limit). The app cap
 
 ## Release gate
 No paid adapter until: the 10 cost-security tests pass, admin entitlements exist, the provider hard limit is verified manually by the owner with redacted evidence, kill switch exercised, owner approves the slice.
+
+## Additions after ADR 0004 (2026-10-26)
+
+| Case | Control |
+|---|---|
+| Granted user abuses their allowance | Per-user caps, per-minute rate and concurrency limits, anomaly alerts |
+| `exempt` user (or a stolen exempt session) drains the budget | Exempt removes only per-user quotas; per-request bounds, global budget, global concurrency, provider hard limit and kill switch still bound the loss |
+| Admin account compromise grants unlimited access | Grants require recent re-authentication, are audited, and cannot raise the global caps; a global cap change needs host access |
+| Self-promotion to admin | No web path creates an admin; the bootstrap is a host-side command |
+| Prompt content leaves the jurisdiction (DeepSeek) | Minimization, explicit consent, no PII in prompts, disclosure of processing location; legal review open (D-8) |
+| Wrong provider receives data (routing bug) | One gateway per provider with a fixed allowlist of models and base URLs |

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { Alert, Button, Card, Form, Input, Typography } from "antd";
+import { useState } from "react";
 import { Navigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
@@ -22,8 +23,7 @@ export function LoginPage() {
 
   if (state.status === "authenticated") return <Navigate to="/" replace />;
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit() {
     const name = subject.trim();
     if (name === "") {
       setError("Enter a user name.");
@@ -42,49 +42,43 @@ export function LoginPage() {
 
   return (
     <main id="main" className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-8">
-      <h1 className="mb-2 text-3xl font-bold text-slate-900">Sign in</h1>
-      <p className="mb-6 text-slate-700">Welcome to Alvo.</p>
-      {DEV_LOGIN_ENABLED ? (
-        <form onSubmit={submit} noValidate className="space-y-4" aria-describedby="login-note">
-          <p id="login-note" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-            Development sign-in. Real sign-in methods will be added later.
-          </p>
-          <div>
-            <label htmlFor="subject" className="mb-1 block font-medium text-slate-900">
-              Development user name
-            </label>
-            <input
-              id="subject"
-              name="subject"
-              type="text"
-              required
-              maxLength={200}
-              autoComplete="username"
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              aria-invalid={error !== null}
-              aria-describedby={error ? "login-error" : undefined}
-              className="w-full rounded-md border border-slate-500 px-3 py-2 text-slate-900"
-            />
-          </div>
-          {error && (
-            <p id="login-error" role="alert" className="rounded-md bg-red-50 p-3 text-red-900">
-              {error}
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-md bg-indigo-700 px-4 py-2 font-semibold text-white hover:bg-indigo-800 disabled:cursor-wait disabled:opacity-70"
+      <Card>
+        <Typography.Title level={1}>Sign in</Typography.Title>
+        <Typography.Paragraph>Welcome to Alvo.</Typography.Paragraph>
+        {DEV_LOGIN_ENABLED ? (
+          <Form
+            layout="vertical"
+            onFinish={() => void submit()}
+            requiredMark={false}
+            noValidate
           >
-            {busy ? "Signing in…" : "Sign in"}
-          </button>
-        </form>
-      ) : (
-        <p role="status" className="rounded-md bg-slate-100 p-3 text-slate-900">
-          Sign-in is not available yet.
-        </p>
-      )}
+            {/* Static information, not an alert: it must not be announced as one. */}
+            <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
+              Development sign-in. Real sign-in methods will be added later.
+            </p>
+            <Form.Item label="Development user name" htmlFor="subject">
+              <Input
+                id="subject"
+                name="subject"
+                required
+                maxLength={200}
+                autoComplete="username"
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                status={error ? "error" : undefined}
+                aria-invalid={error !== null}
+                aria-describedby={error ? "login-error" : undefined}
+              />
+            </Form.Item>
+            {error && <Alert id="login-error" type="error" title={error} className="mb-4" />}
+            <Button type="primary" htmlType="submit" block disabled={busy}>
+              {busy ? "Signing in…" : "Sign in"}
+            </Button>
+          </Form>
+        ) : (
+          <Alert type="info" title="Sign-in is not available yet." role="status" />
+        )}
+      </Card>
     </main>
   );
 }

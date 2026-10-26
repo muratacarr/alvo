@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
+import { AntProviders } from "./AntProviders";
 import { App } from "./App";
 import { ApiError } from "./api/client";
 import { AuthProvider } from "./auth/AuthProvider";
@@ -12,7 +13,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Client errors will not fix themselves; only retry network and server failures.
-      retry: (count, error) => !(error instanceof ApiError && error.status < 500 && error.status > 0) && count < 2,
+      retry: (count, error) =>
+        !(error instanceof ApiError && error.status < 500 && error.status > 0) && count < 2,
     },
   },
 });
@@ -22,12 +24,14 @@ if (root === null) throw new Error("Missing #root element");
 
 createRoot(root).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <AntProviders>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </AntProviders>
   </StrictMode>,
 );

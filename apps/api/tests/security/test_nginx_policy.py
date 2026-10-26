@@ -19,15 +19,38 @@ def test_server_version_is_hidden_and_listing_is_off() -> None:
     assert "autoindex on" not in CONF
 
 
-def test_the_default_csp_allows_no_inline_code_and_no_other_origins() -> None:
-    policy = csp()
-    for directive in ("default-src 'self'", "script-src 'self'", "style-src 'self'"):
-        assert directive in policy
-    assert "unsafe-inline" not in policy and "unsafe-eval" not in policy
-    assert "http:" not in policy and "*" not in policy
-    for directive in ("frame-ancestors 'none'", "object-src 'none'", "base-uri 'none'"):
-        assert directive in policy
-    assert "connect-src 'self'" in policy
+def directives() -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    for part in csp().split(";"):
+        name, *values = part.split()
+        result[name] = values
+    return result
+
+
+def test_scripts_are_strictly_limited_to_our_own_files() -> None:
+    # The part of the policy that stops injected JavaScript. It must never be relaxed.
+    policy = directives()
+    assert policy["script-src"] == ["'self'"]
+    assert policy["default-src"] == ["'self'"]
+    assert "'unsafe-eval'" not in csp()
+
+
+def test_inline_styles_are_allowed_only_because_ant_design_injects_them_at_runtime() -> None:
+    # Documented trade-off (ADR 0008): CSS-in-JS needs inline styles; scripts stay strict.
+    policy = directives()
+    assert policy["style-src"] == ["'self'", "'unsafe-inline'"]
+    for name, values in policy.items():
+        if name != "style-src":
+            assert "'unsafe-inline'" not in values, name
+
+
+def test_the_csp_allows_no_other_origins_and_locks_down_framing_and_plugins() -> None:
+    policy = directives()
+    assert "http:" not in csp() and "*" not in csp()
+    assert policy["frame-ancestors"] == ["'none'"]
+    assert policy["object-src"] == ["'none'"]
+    assert policy["base-uri"] == ["'none'"]
+    assert policy["connect-src"] == ["'self'"]
 
 
 def test_the_baseline_security_headers_are_present() -> None:

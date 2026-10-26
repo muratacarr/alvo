@@ -1,3 +1,6 @@
+/* Cascade order: Tailwind's reset first, then Ant Design components, then Tailwind's own
+   components and utilities. Declared before the import so Tailwind does not choose for us. */
+@layer theme, base, antd, components, utilities;
 @import "tailwindcss";
 
 :root {

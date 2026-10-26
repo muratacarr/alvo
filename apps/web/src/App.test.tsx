@@ -106,3 +106,54 @@ describe("App", () => {
     expect(sessionStorage.length).toBe(0);
   });
 });
+
+/** Removes `@layer antd { ... }` and `@keyframes ... { ... }` blocks, matching braces. */
+function withoutLayerAndKeyframes(css: string): string {
+  let result = "";
+  let index = 0;
+  while (index < css.length) {
+    const rest = css.slice(index);
+    const match = /^@(layer antd|keyframes[^{]*)\{/.exec(rest);
+    if (!match) {
+      result += css.charAt(index);
+      index += 1;
+      continue;
+    }
+    let depth = 1;
+    index += match[0].length;
+    while (index < css.length && depth > 0) {
+      depth += css.charAt(index) === "{" ? 1 : css.charAt(index) === "}" ? -1 : 0;
+      index += 1;
+    }
+  }
+  return result;
+}
+
+function injectedCss(): string {
+  return Array.from(document.head.querySelectorAll("style"))
+    .map((style) => style.textContent ?? "")
+    .join(" ");
+}
+
+describe("Ant Design styling", () => {
+  it("puts component styles in the antd cascade layer so Tailwind cannot override them", async () => {
+    mockApi({ "GET /api/v1/auth/me": { status: 401, json: { error: "unauthenticated" } } });
+    renderWithProviders(<App />, "/");
+    await screen.findByRole("heading", { name: "Sign in" });
+    const css = injectedCss();
+    expect(css).toContain("@layer antd");
+    // Rules outside a layer beat every layer. Only custom-property definitions may live there.
+    const unlayered = withoutLayerAndKeyframes(css);
+    const properties = [...unlayered.matchAll(/[{;]\s*([a-z-]+)\s*:/gi)].map((m) => m[1] ?? "");
+    const visual = properties.filter((name) => !name.startsWith("--"));
+    expect(visual).toEqual([]);
+  });
+
+  it("does not load fonts or styles from other hosts", async () => {
+    mockApi({ "GET /api/v1/auth/me": { status: 401, json: { error: "unauthenticated" } } });
+    renderWithProviders(<App />, "/");
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(injectedCss()).not.toMatch(/https?:\/\//);
+    expect(document.head.querySelector("link[href^='http']")).toBeNull();
+  });
+});

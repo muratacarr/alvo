@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { Alert, Button, Checkbox, Form, Input, List, Tag, Typography } from "antd";
+import { useState } from "react";
 
 import { ApiError, api } from "../api/client";
 import { describeError } from "../errors";
@@ -17,9 +18,6 @@ interface Page {
 }
 
 const PAGE_SIZE = 50;
-
-const buttonClass =
-  "rounded-md border border-slate-500 px-3 py-1 text-sm font-medium text-slate-900 hover:bg-slate-100";
 
 export function ProjectsPage() {
   const queryClient = useQueryClient();
@@ -71,8 +69,7 @@ export function ProjectsPage() {
     onSuccess: refresh,
   });
 
-  function submit(event: FormEvent) {
-    event.preventDefault();
+  function submit() {
     setNotice(null);
     const cleanTitle = title.trim();
     if (cleanTitle === "") {
@@ -95,81 +92,67 @@ export function ProjectsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-3xl font-bold text-slate-900">Projects</h1>
+      <Typography.Title level={1}>Projects</Typography.Title>
 
       <section aria-labelledby="create-heading">
-        <h2 id="create-heading" className="mb-3 text-xl font-semibold text-slate-900">
+        <Typography.Title level={2} id="create-heading">
           Create a project
-        </h2>
-        <form onSubmit={submit} noValidate className="max-w-xl space-y-4">
-          <div>
-            <label htmlFor="project-title" className="mb-1 block font-medium text-slate-900">
-              Title
-            </label>
-            <input
+        </Typography.Title>
+        <Form
+          layout="vertical"
+          onFinish={submit}
+          requiredMark={false}
+          noValidate
+          className="max-w-xl"
+        >
+          <Form.Item label="Title" htmlFor="project-title">
+            <Input
               id="project-title"
-              type="text"
               maxLength={200}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
+              status={titleInvalid ? "error" : undefined}
               aria-invalid={titleInvalid}
               aria-describedby={formError ? "form-error" : undefined}
-              className="w-full rounded-md border border-slate-500 px-3 py-2 text-slate-900"
             />
-          </div>
-          <div>
-            <label htmlFor="project-description" className="mb-1 block font-medium text-slate-900">
-              Description (optional)
-            </label>
-            <textarea
+          </Form.Item>
+          <Form.Item label="Description (optional)" htmlFor="project-description">
+            <Input.TextArea
               id="project-description"
               maxLength={2000}
               rows={3}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              className="w-full rounded-md border border-slate-500 px-3 py-2 text-slate-900"
             />
-          </div>
-          {formError && (
-            <p id="form-error" role="alert" className="rounded-md bg-red-50 p-3 text-red-900">
-              {formError}
-            </p>
-          )}
+          </Form.Item>
+          {formError && <Alert id="form-error" type="error" title={formError} className="mb-4" />}
           {notice && (
-            <p role="status" className="rounded-md bg-green-50 p-3 text-green-900">
+            <p role="status" className="mb-4 rounded-md bg-green-50 p-3 text-green-900">
               {notice}
             </p>
           )}
-          <button
-            type="submit"
-            disabled={create.isPending}
-            className="rounded-md bg-indigo-700 px-4 py-2 font-semibold text-white hover:bg-indigo-800 disabled:opacity-70"
-          >
+          <Button type="primary" htmlType="submit" disabled={create.isPending}>
             {create.isPending ? "Creating…" : "Create project"}
-          </button>
-        </form>
+          </Button>
+        </Form>
       </section>
 
       <section aria-labelledby="list-heading">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 id="list-heading" className="text-xl font-semibold text-slate-900">
+          <Typography.Title level={2} id="list-heading" className="!mb-0">
             Your projects
-          </h2>
-          <label className="flex items-center gap-2 text-slate-900">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(event) => setShowArchived(event.target.checked)}
-              className="size-4"
-            />
+          </Typography.Title>
+          <Checkbox checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)}>
             Show archived
-          </label>
+          </Checkbox>
         </div>
 
         {rowError && (
-          <p role="alert" className="mb-3 rounded-md bg-red-50 p-3 text-red-900">
-            {describeError(rowError, "That change could not be saved. Please try again.")}
-          </p>
+          <Alert
+            type="error"
+            title={describeError(rowError, "That change could not be saved. Please try again.")}
+            className="mb-3"
+          />
         )}
 
         {projects.isPending && (
@@ -179,71 +162,64 @@ export function ProjectsPage() {
         )}
 
         {projects.isError && (
-          <div role="alert" className="space-y-2 rounded-md bg-red-50 p-3 text-red-900">
-            <p>{describeError(projects.error, "Could not load projects.")}</p>
-            <button type="button" className={buttonClass} onClick={() => void projects.refetch()}>
-              Try again
-            </button>
-          </div>
+          <Alert
+            type="error"
+            title={describeError(projects.error, "Could not load projects.")}
+            action={<Button onClick={() => void projects.refetch()}>Try again</Button>}
+          />
         )}
 
         {projects.isSuccess && items.length === 0 && (
-          <p className="text-slate-700">No projects yet. Create your first one above.</p>
+          <Typography.Paragraph>No projects yet. Create your first one above.</Typography.Paragraph>
         )}
 
         {items.length > 0 && (
-          <ul className="space-y-3">
-            {items.map((project) => (
-              <li
-                key={project.id}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-slate-300 p-4"
-              >
+          <List
+            bordered
+            dataSource={items}
+            renderItem={(project) => (
+              <List.Item key={project.id}>
+                <div className="flex w-full flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="break-words text-lg font-semibold text-slate-900">
+                  <Typography.Title level={3} className="!mb-1 break-words !text-lg">
                     {project.title}
-                  </h3>
+                  </Typography.Title>
                   {project.description && (
-                    <p className="break-words text-slate-700">{project.description}</p>
+                    <Typography.Paragraph className="!mb-1 break-words">
+                      {project.description}
+                    </Typography.Paragraph>
                   )}
-                  {project.archived && (
-                    <span className="mt-1 inline-block rounded bg-slate-200 px-2 py-0.5 text-sm text-slate-900">
-                      Archived
-                    </span>
-                  )}
+                  {project.archived && <Tag>Archived</Tag>}
                 </div>
                 {project.archived ? (
-                  <button
-                    type="button"
-                    className={buttonClass}
+                  <Button
                     aria-label={`Restore ${project.title}`}
                     onClick={() => restore.mutate(project.id)}
                   >
                     Restore
-                  </button>
+                  </Button>
                 ) : (
-                  <button
-                    type="button"
-                    className={buttonClass}
+                  <Button
                     aria-label={`Archive ${project.title}`}
                     onClick={() => archive.mutate(project.id)}
                   >
                     Archive
-                  </button>
+                  </Button>
                 )}
-              </li>
-            ))}
-          </ul>
+                </div>
+              </List.Item>
+            )}
+          />
         )}
 
         {projects.hasNextPage && (
-          <button
-            type="button"
-            className={`${buttonClass} mt-4`}
+          <Button
+            className="mt-4"
             disabled={projects.isFetchingNextPage}
             onClick={() => void projects.fetchNextPage()}
           >
             {projects.isFetchingNextPage ? "Loading…" : "Load more"}
-          </button>
+          </Button>
         )}
       </section>
     </div>

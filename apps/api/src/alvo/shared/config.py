@@ -21,6 +21,7 @@ _PLACEHOLDER = re.compile(r"change_?me|your_|placeholder|example", re.IGNORECASE
 _WHOLE_VALUE_PLACEHOLDER = re.compile(r"(x+|todo|password|secret|changeit)+", re.IGNORECASE)
 _MIN_SESSION_SECRET_LENGTH = 32
 _MIN_DB_PASSWORD_LENGTH = 16
+_MIN_GOOGLE_SECRET_LENGTH = 20
 _MIN_DISTINCT_CHARS = 10
 # Docker/Compose mount secrets as files here; absent on a developer machine.
 _RUNTIME_SECRETS_DIR = Path("/run/secrets")
@@ -46,7 +47,10 @@ class Settings(BaseSettings):
     # Exact origin the PWA is served from; unsafe requests must carry it in `Origin`.
     public_origin: str = "http://localhost:8000"
     # "mock" exposes a development-only login route; it is rejected in production.
-    identity_provider: Literal["none", "mock"] = "none"
+    identity_provider: Literal["none", "mock", "google"] = "none"
+    # Google OIDC client (identity_provider="google"); the secret comes from a secret file.
+    google_client_id: str | None = None
+    google_client_secret: SecretStr | None = None
     session_idle_minutes: int = 30
     session_absolute_minutes: int = 720
     # Admin changes require a sign-in no older than this (step-up authentication).
@@ -105,6 +109,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_environment_rules(self) -> "Settings":
+        if self.identity_provider == "google":
+            secret = (
+                self.google_client_secret.get_secret_value() if self.google_client_secret else ""
+            )
+            if not self.google_client_id or not self.google_client_id.endswith(
+                ".apps.googleusercontent.com"
+            ):
+                raise ValueError("google_client_id must be a Google OAuth client id")
+            _reject_placeholder(secret, "google_client_secret")
+            if len(secret) < _MIN_GOOGLE_SECRET_LENGTH:
+                raise ValueError("google_client_secret is missing or too short")
         if not 0 < self.session_idle_minutes <= self.session_absolute_minutes:
             raise ValueError("session lifetimes must satisfy 0 < idle <= absolute")
         if not 1024 <= self.max_request_bytes <= 50 * 1024 * 1024:

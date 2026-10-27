@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, select, update
+from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
@@ -20,6 +20,17 @@ class UserRow(Base):
     subject: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     role: Mapped[str] = mapped_column(String(16), server_default="user")
+
+
+class InviteRow(Base):
+    """Who may create an account on first sign-in. Consumed (deleted) when used."""
+
+    __tablename__ = "sign_in_invites"
+
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    role: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class SessionRow(Base):
@@ -47,16 +58,49 @@ class SqlIdentityStore:
     def __init__(self, db: Session) -> None:
         self._db = db
 
-    def get_or_create_user(self, provider: str, subject: str, now: datetime) -> UUID:
+    def get_or_create_user(
+        self, provider: str, subject: str, now: datetime, role: Role = "user"
+    ) -> UUID:
         # ON CONFLICT DO NOTHING keeps concurrent first logins safe against the unique constraint.
         self._db.execute(
             insert(UserRow)
-            .values(id=uuid4(), provider=provider, subject=subject, created_at=now)
+            .values(id=uuid4(), provider=provider, subject=subject, created_at=now, role=role)
             .on_conflict_do_nothing(constraint="uq_users_provider_subject")
         )
+        found = self.find_user(provider, subject)
+        if found is None:
+            raise RuntimeError("user missing right after insert")
+        return found
+
+    def find_user(self, provider: str, subject: str) -> UUID | None:
         return self._db.execute(
             select(UserRow.id).where(UserRow.provider == provider, UserRow.subject == subject)
-        ).scalar_one()
+        ).scalar_one_or_none()
+
+    def upsert_invite(self, email: str, role: Role, now: datetime, expires_at: datetime) -> None:
+        self._db.execute(
+            insert(InviteRow)
+            .values(email=email, role=role, created_at=now, expires_at=expires_at)
+            .on_conflict_do_update(
+                index_elements=[InviteRow.email],
+                set_={"role": role, "created_at": now, "expires_at": expires_at},
+            )
+        )
+
+    def take_invite(self, email: str, now: datetime) -> Role | None:
+        """Atomically use up a valid invite; two simultaneous sign-ins cannot both succeed."""
+        role = self._db.execute(
+            delete(InviteRow)
+            .where(InviteRow.email == email, InviteRow.expires_at > now)
+            .returning(InviteRow.role)
+        ).scalar_one_or_none()
+        if role is None:
+            return None
+        return "admin" if role == "admin" else "user"
+
+    def revoke_invite(self, email: str) -> bool:
+        result = self._db.execute(delete(InviteRow).where(InviteRow.email == email))
+        return bool(result.rowcount)  # type: ignore[attr-defined]
 
     def user_exists(self, user_id: UUID) -> bool:
         found = self._db.execute(select(UserRow.id).where(UserRow.id == user_id)).first()

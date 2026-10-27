@@ -1,23 +1,30 @@
 """HTTP transport for identity. Routes stay thin: validation, cookies, CSRF, status codes."""
 
-from collections.abc import Iterator
+import logging
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import RedirectResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session, sessionmaker
 
 from alvo.identity.application import AuthenticatedSession, IdentityService
-from alvo.identity.domain import Principal, VerifiedIdentity
-from alvo.identity.security import tokens_match
+from alvo.identity.domain import NotInvited, Principal, VerifiedIdentity
+from alvo.identity.oidc import GoogleOidc, OidcError
+from alvo.identity.security import open_flow_state, seal_flow_state, tokens_match
 from alvo.shared.config import Settings
 from alvo.shared.errors import ApiError
 from alvo.shared.http import client_address
 from alvo.shared.ratelimit import enforce
 
 COOKIE_NAME = "__Host-alvo_session"
+FLOW_COOKIE = "__Host-alvo_oidc"
+_FLOW_SECONDS = 600
+_MAX_CODE_LENGTH = 2048
+audit = logging.getLogger("alvo.audit")
 CSRF_HEADER = "X-CSRF-Token"
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
@@ -127,7 +134,9 @@ def require_admin_change(
     return session.principal
 
 
-def build_router(settings: Settings, service: IdentityService) -> APIRouter:
+def build_router(
+    settings: Settings, service: IdentityService, oidc: GoogleOidc | None = None
+) -> APIRouter:
     router = APIRouter(
         prefix="/api/v1/auth",
         dependencies=[Depends(verify_origin), Depends(limit_auth_attempts)],
@@ -163,6 +172,9 @@ def build_router(settings: Settings, service: IdentityService) -> APIRouter:
             set_session_cookie(response, signed_in.token)
             return LoginResponse(user_id=str(signed_in.user_id), csrf_token=signed_in.csrf_token)
 
+    if oidc is not None:
+        _add_google_routes(router, settings, service, oidc, set_session_cookie)
+
     @router.get("/me")
     def me(session: Annotated[AuthenticatedSession, Depends(require_session)]) -> dict[str, str]:
         return {
@@ -190,3 +202,80 @@ def build_router(settings: Settings, service: IdentityService) -> APIRouter:
         return response
 
     return router
+
+
+def _add_google_routes(
+    router: APIRouter,
+    settings: Settings,
+    service: IdentityService,
+    oidc: GoogleOidc,
+    set_session_cookie: "Callable[[Response, str], None]",
+) -> None:
+    key = settings.session_secret.get_secret_value()
+    home = f"{settings.public_origin}/"
+
+    def throttle(request: Request) -> None:
+        # Safe (GET) routes skip the router-level limit, but the callback calls Google.
+        address = client_address(request, trust_forwarded_for=settings.trust_forwarded_for)
+        enforce(request, f"oidc:{address}", settings.auth_attempts_per_minute)
+
+    def finish(outcome: str) -> Response:
+        response = RedirectResponse(f"{home}?signin={outcome}", status_code=302)
+        response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
+        return response
+
+    @router.get("/google/start", include_in_schema=False)
+    def google_start(request: Request) -> Response:
+        throttle(request)
+        flow = oidc.begin()
+        expires = int(service.now().timestamp()) + _FLOW_SECONDS
+        sealed = seal_flow_state(
+            key, {"s": flow.state, "n": flow.nonce, "v": flow.verifier, "e": expires}
+        )
+        response = RedirectResponse(flow.url, status_code=302)
+        response.set_cookie(
+            FLOW_COOKIE,
+            sealed,
+            max_age=_FLOW_SECONDS,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            path="/",
+        )
+        return response
+
+    @router.get("/google/callback", include_in_schema=False)
+    def google_callback(
+        request: Request,
+        db: Annotated[Session, Depends(get_db)],
+        code: str | None = None,
+        state: str | None = None,
+    ) -> Response:
+        throttle(request)
+        sealed = request.cookies.get(FLOW_COOKIE)
+        flow = open_flow_state(key, sealed) if sealed else None
+        if (
+            flow is None
+            or not code
+            or len(code) > _MAX_CODE_LENGTH
+            or not state
+            or not isinstance(flow.get("e"), int)
+            or int(flow["e"]) < int(service.now().timestamp())
+            or not tokens_match(str(flow.get("s", "")), state)
+        ):
+            audit.warning("event=login_failed provider=google reason=flow")
+            return finish("failed")
+        try:
+            claims = oidc.complete(code, str(flow["v"]), str(flow["n"]))
+        except OidcError as exc:
+            audit.warning("event=login_failed provider=google reason=%s", exc)
+            return finish("failed")
+        identity = VerifiedIdentity("google", claims.subject, claims.email)
+        try:
+            signed_in = service.sign_in_invited(db, identity, request.cookies.get(COOKIE_NAME))
+        except NotInvited:
+            audit.warning("event=login_denied provider=google reason=not_invited")
+            return finish("not_invited")
+        response = finish("ok")
+        set_session_cookie(response, signed_in.token)
+        return response

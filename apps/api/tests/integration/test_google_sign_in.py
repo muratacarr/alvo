@@ -58,12 +58,21 @@ class Harness:
             CALLBACK, params={"code": code, "state": state}, follow_redirects=False
         )
         assert response.status_code == 302
-        outcome = dict(parse_qsl(urlsplit(response.headers["location"]).query))["signin"]
+        outcome = self.outcome_of(response.headers["location"])
         has_session = any(
             "__Host-alvo_session=" in value and "Max-Age=0" not in value
             for value in response.headers.get_list("set-cookie")
         )
         return outcome, has_session
+
+    @staticmethod
+    def outcome_of(location: str) -> str:
+        parts = urlsplit(location)
+        assert location.startswith("https://testserver/")
+        if parts.path == "/":
+            return "ok"
+        assert parts.path == "/login"
+        return dict(parse_qsl(parts.query))["signin"]
 
     def sign_in(self) -> tuple[str, bool]:
         state, _ = self.start()
@@ -204,7 +213,7 @@ def test_a_missing_code_such_as_access_denied_fails_quietly(harness: Harness) ->
     state, _ = harness.start()
     response = harness.client.get(CALLBACK, params={"state": state}, follow_redirects=False)
     assert response.status_code == 302
-    assert dict(parse_qsl(urlsplit(response.headers["location"]).query))["signin"] == "failed"
+    assert Harness.outcome_of(response.headers["location"]) == "failed"
 
 
 def test_a_google_outage_fails_quietly_without_leaking_details(harness: Harness) -> None:
@@ -215,7 +224,7 @@ def test_a_google_outage_fails_quietly_without_leaking_details(harness: Harness)
         CALLBACK, params={"code": "c", "state": state}, follow_redirects=False
     )
     assert response.status_code == 302
-    assert response.headers["location"].endswith("/?signin=failed")
+    assert response.headers["location"] == "https://testserver/login?signin=failed"
     assert "provider" not in response.text
 
 

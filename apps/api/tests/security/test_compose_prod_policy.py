@@ -32,13 +32,12 @@ def test_nothing_is_published_on_the_host() -> None:
         assert "expose" not in svc, name
 
 
-def test_the_database_and_api_are_only_on_internal_networks() -> None:
+def test_the_database_is_only_on_internal_networks() -> None:
     compose = load()
-    for name in ("db", "api"):
-        networks = services()[name]["networks"]
-        assert networks, name
-        for network in networks:
-            assert compose["networks"][network].get("internal") is True, (name, network)
+    networks = services()["db"]["networks"]
+    assert networks
+    for network in networks:
+        assert compose["networks"][network].get("internal") is True, network
 
 
 def test_only_the_web_server_and_the_tunnel_can_reach_the_internet() -> None:
@@ -47,7 +46,15 @@ def test_only_the_web_server_and_the_tunnel_can_reach_the_internet() -> None:
     on_open = {
         name for name, svc in services().items() if open_networks & set(svc.get("networks", []))
     }
-    assert on_open == {"web", "cloudflared"}
+    # The API joins only its own outbound network, for Google sign-in (ADR 0010).
+    assert on_open == {"web", "cloudflared", "api"}
+
+
+def test_the_api_egress_network_is_private_to_the_api() -> None:
+    members = {name for name, svc in services().items() if "egress" in svc.get("networks", [])}
+    assert members == {"api"}
+    assert "egress" in load()["networks"]
+    assert not set(services()["api"]["networks"]) & {"proxy"}
 
 
 def test_the_tunnel_does_not_share_a_network_with_the_api() -> None:
@@ -98,7 +105,8 @@ def test_every_container_runs_as_a_non_root_user() -> None:
 def test_production_settings_and_no_development_login() -> None:
     environment = services()["api"]["environment"]
     assert environment["ALVO_ENVIRONMENT"] == "production"
-    assert environment["ALVO_IDENTITY_PROVIDER"] != "mock"
+    assert environment["ALVO_IDENTITY_PROVIDER"] == "google"
+    assert environment["ALVO_GOOGLE_CLIENT_ID"].startswith("${ALVO_GOOGLE_CLIENT_ID:?")
     assert environment["ALVO_PUBLIC_ORIGIN"].startswith("${ALVO_PUBLIC_ORIGIN:?")
     assert "VITE_DEV_LOGIN" not in COMPOSE.read_text(encoding="utf-8")
 
@@ -109,6 +117,7 @@ def test_secrets_are_root_owned_files_outside_the_checkout() -> None:
         "db_password",
         "alvo_database_url",
         "alvo_session_secret",
+        "alvo_google_client_secret",
         "tunnel_token",
     }
     for secret in declared.values():
@@ -136,4 +145,7 @@ def test_the_api_trusts_forwarded_for_only_because_it_is_unreachable_except_thro
     api = services()["api"]
     assert api["environment"]["ALVO_TRUST_FORWARDED_FOR"] == "true"
     assert "ports" not in api
-    assert not any(not load()["networks"][n].get("internal") for n in api["networks"])
+    # Not reachable from the tunnel's network; its only open network is its private egress one.
+    assert "proxy" not in api["networks"]
+    open_networks = [n for n in api["networks"] if not load()["networks"][n].get("internal")]
+    assert open_networks == ["egress"]

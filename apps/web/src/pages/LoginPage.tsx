@@ -1,12 +1,22 @@
 import { Alert, Button, Card, Form, Input, Typography } from "antd";
 import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthProvider";
 import { describeError } from "../errors";
 
 const DEV_LOGIN_ENABLED = import.meta.env.VITE_DEV_LOGIN !== "false";
+
+/** Where the API starts the Google sign-in (a full-page redirect, not a fetch). */
+const GOOGLE_START_URL = "/api/v1/auth/google/start";
+
+/** Reasons the API puts in `?signin=` after a failed Google sign-in. Nothing else is shown. */
+const GOOGLE_FAILURES: Record<string, string> = {
+  failed: "Sign-in did not complete. Please try again.",
+  not_invited:
+    "This Google account has not been invited. Ask the owner to invite the address you used.",
+};
 
 function messageFor(error: unknown): string {
   if (error instanceof ApiError && error.status === 404) {
@@ -17,6 +27,8 @@ function messageFor(error: unknown): string {
 
 export function LoginPage() {
   const { state, signIn } = useAuth();
+  const [params] = useSearchParams();
+  const googleFailure = GOOGLE_FAILURES[params.get("signin") ?? ""];
   const [subject, setSubject] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,7 +88,15 @@ export function LoginPage() {
             </Button>
           </Form>
         ) : (
-          <Alert type="info" title="Sign-in is not available yet." role="status" />
+          <>
+            {googleFailure && <Alert type="error" title={googleFailure} className="mb-4" />}
+            <Button type="primary" block href={GOOGLE_START_URL}>
+              Sign in with Google
+            </Button>
+            <Typography.Paragraph type="secondary" className="mt-4">
+              Access is by invitation only.
+            </Typography.Paragraph>
+          </>
         )}
       </Card>
     </main>

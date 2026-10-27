@@ -18,6 +18,7 @@ from alvo.entitlements.api import build_router as build_entitlements_router
 from alvo.identity.api import build_router as build_identity_router
 from alvo.identity.application import IdentityService
 from alvo.identity.domain import SessionPolicy
+from alvo.identity.oidc import GoogleOidc
 from alvo.imports.api import router as imports_router
 from alvo.projects.api import router as projects_router
 from alvo.shared.config import Settings
@@ -50,6 +51,7 @@ def create_app(
     settings: Settings | None = None,
     readiness_probe: ReadinessProbe | None = None,
     clock: Clock | None = None,
+    oidc: GoogleOidc | None = None,
 ) -> FastAPI:
     # Settings() validates secrets and raises at startup if anything is missing or weak.
     settings = settings or Settings()
@@ -64,6 +66,15 @@ def create_app(
         clock=clock or _utc_now,
     )
 
+    if oidc is None and settings.identity_provider == "google":
+        if not (settings.google_client_id and settings.google_client_secret):
+            raise ValueError("google sign-in needs a client id and secret")  # Settings checked
+        oidc = GoogleOidc(
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret.get_secret_value(),
+            redirect_uri=f"{settings.public_origin}/api/v1/auth/google/callback",
+        )
+
     docs_enabled = settings.environment != "production"
     app = FastAPI(
         title="Alvo API",
@@ -77,7 +88,7 @@ def create_app(
     app.state.identity_service = identity_service
     app.state.settings = settings
     app.state.clock = clock or _utc_now
-    app.include_router(build_identity_router(settings, identity_service))
+    app.include_router(build_identity_router(settings, identity_service, oidc))
     app.include_router(build_entitlements_router(settings, identity_service))
     app.include_router(projects_router)
     app.include_router(content_router)

@@ -17,6 +17,12 @@ class VerifiedIdentity:
 
     provider: str
     subject: str
+    # Only providers that asserted a verified address set this; used to match an invite.
+    email: str | None = None
+
+
+class NotInvited(Exception):
+    """A first-time sign-in by someone nobody invited."""
 
 
 @dataclass(frozen=True)

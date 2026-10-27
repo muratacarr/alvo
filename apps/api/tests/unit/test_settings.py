@@ -137,3 +137,41 @@ def test_a_genuine_random_secret_is_not_mistaken_for_a_placeholder(fragment: str
 def test_whole_value_placeholders_are_still_rejected(placeholder: str) -> None:
     with pytest.raises(ValidationError):
         make(session_secret=placeholder)
+
+
+GOOGLE_ID = "1234567890-abcdefghij.apps.googleusercontent.com"
+
+
+def google(**overrides: str) -> Settings:
+    values = {
+        "identity_provider": "google",
+        "google_client_id": GOOGLE_ID,
+        "google_client_secret": secrets.token_urlsafe(24),
+    }
+    values.update(overrides)
+    return make(**values)
+
+
+def test_google_sign_in_is_allowed_in_production_with_a_client_id_and_secret() -> None:
+    assert google().identity_provider == "google"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"google_client_id": ""},
+        {"google_client_id": "not-a-google-client"},
+        {"google_client_secret": ""},
+        {"google_client_secret": "short"},
+        {"google_client_secret": "CHANGE_ME_CHANGE_ME_CHANGE_ME"},
+    ],
+)
+def test_google_sign_in_refuses_missing_or_placeholder_credentials(
+    overrides: dict[str, str],
+) -> None:
+    with pytest.raises(ValidationError):
+        google(**overrides)
+
+
+def test_google_credentials_are_not_required_for_other_providers() -> None:
+    assert make(identity_provider="none").google_client_id is None

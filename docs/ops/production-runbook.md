@@ -173,7 +173,7 @@ On 2026-10-27 the real chain ran on the Pi: `backup.sh` from the systemd service
 
 ## Not done yet (do not tell anyone the system is production-ready)
 
-- **Real sign-in method.** In production nobody can sign in (the development login is forbidden there). Decision D-1 is still open.
+- **Real sign-in method.** In production nobody can sign in yet. Google sign-in with invitations is built (slice 1G-1, ADR 0010) but not switched on: it needs the Google OAuth client, an egress network for the API and the web button (slice 1G-2).
 - **Proven on 2026-10-27:** a real release run, `gh attestation verify` for both images, the first deploy with `deploy.sh --first`, external checks (HTTPS with strict CSP, `/docs` and `/openapi.json` return 404, unauthenticated API call returns 401, HTTP redirects to HTTPS), and a real off-device backup plus restore (section 5). **Not yet proven:** a normal (non-first) deploy with its backup-freshness gate, `--rollback`, a reboot test that brings the stack back healthy without help, an external port scan, and low-disk and tunnel-down behaviour. HSTS is not enabled yet. The Pi's `gh` login token expires after 90 days: renew it before then, or deploys will refuse (attestation check).
 - **Rate limiting is built (slice 1F-3, ADR 0009) but untested on the Pi.** Check it after the next deploy: send more than 40 quick requests to `/api/v1/auth/me` from one machine and expect `429`. Cloudflare-side rate limiting and bot protection are optional extras set in the Cloudflare dashboard.
 - **Provider calls and spend control** (BudgetGuard): Phase 3.

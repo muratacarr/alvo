@@ -4,10 +4,13 @@
 # - images are pulled by digest (never built on the Pi, never a mutable tag);
 # - nothing is published on the host: the only way in is the outbound Cloudflare Tunnel;
 # - secrets are root-owned files outside the checkout (/etc/alvo/secrets);
-# - the API has no route to the internet (add an egress network only when a feature needs it);
-# - no mock login: until a real sign-in method exists, nobody can sign in.
+# - the API can reach the internet only through its own `egress` network, which nothing else
+#   joins and which publishes nothing: it exists so the API can call Google's sign-in endpoints
+#   (ADR 0010). The database stays on internal networks only;
+# - no mock login: sign-in is Google, by invitation only.
 #
 #   export ALVO_PUBLIC_ORIGIN=https://alvo.example.com
+#   export ALVO_GOOGLE_CLIENT_ID=<id>.apps.googleusercontent.com
 #   export ALVO_API_DIGEST=sha256:...   ALVO_WEB_DIGEST=sha256:...
 #   docker compose -f compose.prod.yaml config -q      # check before starting
 name: alvo
@@ -59,19 +62,22 @@ services:
     environment:
       ALVO_ENVIRONMENT: production
       ALVO_PUBLIC_ORIGIN: ${ALVO_PUBLIC_ORIGIN:?set ALVO_PUBLIC_ORIGIN to the https address of the site}
-      # No sign-in route exists until a real identity provider is added.
-      ALVO_IDENTITY_PROVIDER: none
+      ALVO_IDENTITY_PROVIDER: google
+      # Not a secret (it appears in the browser address bar); the client secret is a file.
+      ALVO_GOOGLE_CLIENT_ID: ${ALVO_GOOGLE_CLIENT_ID:?set ALVO_GOOGLE_CLIENT_ID to the Google OAuth client id}
       # Only our nginx can reach the API and it overwrites X-Forwarded-For (ADR 0009).
       ALVO_TRUST_FORWARDED_FOR: "true"
     secrets:
       - alvo_database_url
       - alvo_session_secret
+      - alvo_google_client_secret
     depends_on:
       db:
         condition: service_healthy
     networks:
       - backend
       - app
+      - egress
     tmpfs:
       - /tmp
     mem_limit: 512m
@@ -136,6 +142,8 @@ networks:
     internal: true
   # Only the web server and the tunnel live here; the tunnel needs outbound access.
   proxy: {}
+  # Outbound-only route for the API (Google sign-in). No other service joins it.
+  egress: {}
 
 volumes:
   db-data: {}
@@ -147,5 +155,7 @@ secrets:
     file: /etc/alvo/secrets/alvo_database_url
   alvo_session_secret:
     file: /etc/alvo/secrets/alvo_session_secret
+  alvo_google_client_secret:
+    file: /etc/alvo/secrets/alvo_google_client_secret
   tunnel_token:
     file: /etc/alvo/secrets/tunnel_token

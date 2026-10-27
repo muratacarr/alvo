@@ -220,7 +220,9 @@ def _add_google_routes(
         enforce(request, f"oidc:{address}", settings.auth_attempts_per_minute)
 
     def finish(outcome: str) -> Response:
-        response = RedirectResponse(f"{home}?signin={outcome}", status_code=302)
+        # Success goes home; a failure lands on the sign-in page with a generic reason code.
+        target = home if outcome == "ok" else f"{home}login?signin={outcome}"
+        response = RedirectResponse(target, status_code=302)
         response.delete_cookie(FLOW_COOKIE, path="/", secure=True, httponly=True, samesite="lax")
         return response
 

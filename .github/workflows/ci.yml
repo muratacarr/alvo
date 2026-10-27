@@ -145,6 +145,7 @@ jobs:
           ALVO_API_DIGEST: sha256:0000000000000000000000000000000000000000000000000000000000000000
           ALVO_WEB_DIGEST: sha256:0000000000000000000000000000000000000000000000000000000000000000
           ALVO_PUBLIC_ORIGIN: https://alvo.invalid
+          ALVO_GOOGLE_CLIENT_ID: 0-ci.apps.googleusercontent.com
         run: docker compose -f compose.prod.yaml config -q
 
   image:

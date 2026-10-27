@@ -56,7 +56,13 @@ class Setup:
             path.chmod(0o755)
         self.secrets = tmp / "secrets"
         self.secrets.mkdir()
-        for secret in ("db_password", "alvo_database_url", "alvo_session_secret", "tunnel_token"):
+        for secret in (
+            "db_password",
+            "alvo_database_url",
+            "alvo_session_secret",
+            "alvo_google_client_secret",
+            "tunnel_token",
+        ):
             (self.secrets / secret).write_text("x", encoding="utf-8")
         (tmp / "compose.prod.yaml").write_text("name: alvo\n", encoding="utf-8")
         self.backup_state = tmp / "backup-state"
@@ -66,6 +72,7 @@ class Setup:
             **os.environ,
             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
             "ALVO_PUBLIC_ORIGIN": "https://alvo.example.org",
+            "ALVO_GOOGLE_CLIENT_ID": "1-test.apps.googleusercontent.com",
             "ALVO_COMPOSE_FILE": str(tmp / "compose.prod.yaml"),
             "ALVO_SECRETS_DIR": str(self.secrets),
             "ALVO_DEPLOY_STATE_DIR": str(tmp / "deploy-state"),
@@ -184,6 +191,19 @@ def test_too_little_free_disk_space_stops_the_deploy(setup: Setup) -> None:
     result = setup.run(ALVO_MIN_FREE_GB="99999999")
     assert result.returncode != 0
     assert not any("pull" in call for call in setup.calls())
+
+
+@needs_bash
+def test_a_missing_google_secret_or_client_id_stops_the_deploy(setup: Setup) -> None:
+    (setup.secrets / "alvo_google_client_secret").unlink()
+    assert setup.run().returncode != 0
+    assert setup.calls() == []
+
+
+@needs_bash
+def test_a_missing_google_client_id_stops_the_deploy(setup: Setup) -> None:
+    assert setup.run(ALVO_GOOGLE_CLIENT_ID="").returncode != 0
+    assert setup.calls() == []
 
 
 @needs_bash

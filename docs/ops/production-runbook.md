@@ -45,6 +45,7 @@ sudo sh -c 'umask 022; openssl rand -base64 48 | tr -d "\n" > alvo_session_secre
 #   postgresql+psycopg://alvo_app:<db_password>@db:5432/alvo
 # Create it with an editor, not with a command that puts the password into your shell history.
 # tunnel_token: the token from the Cloudflare dashboard (step 3).
+# alvo_google_client_secret: the client secret from Google Cloud (see "Google sign-in" below).
 ```
 
 Never paste these values into chat, issues, CI or a commit. Rotate them if they are ever exposed (see `secrets-management.md`).
@@ -81,6 +82,27 @@ Two separate steps, on purpose: **GitHub builds and publishes** (after you appro
    sudo /opt/alvo/ops/deploy/deploy.sh /path/to/release-manifest.json
    ```
    The script refuses unless: the manifest has exactly the expected shape, both images carry an attestation made by this repository's release workflow, the checked-out commit equals the release commit, all secrets exist, the last backup is under 8 hours old, and there is enough disk space. It then pulls by digest, runs the database migrations **before** starting anything new (a failed migration leaves the old version running), starts the stack, waits for health, runs two smoke checks, and records the release in `/var/lib/alvo-deploy`.
+
+### Google sign-in (slice 1G-2, ADR 0010)
+Sign-in is Google only, by invitation. Do this once, **before** the first release that contains it (the deploy script refuses without these values).
+
+1. **Google Cloud (owner).** console.cloud.google.com, create a project (for example `alvo`). Open *Google Auth Platform* (older name: *APIs & Services, OAuth consent screen*):
+   - Branding: app name `Alvo`, your support e-mail. Audience: **External**, publishing status **Testing**. Under *Test users* add every address you plan to invite (in Testing mode Google refuses anyone else, which is an extra safety net).
+   - Data access: only the default scopes `openid` and `.../auth/userinfo.email`. Nothing sensitive, so no verification is needed.
+   - Clients, *Create client*, type **Web application**. Leave "Authorised JavaScript origins" empty. Under *Authorised redirect URIs* add exactly `https://alvo.<your-domain>/api/v1/auth/google/callback`. Copy the **client ID** and **client secret** (the secret is shown once; you can also download the JSON).
+2. **On the Pi.** The client ID is not a secret; the client secret is.
+   ```
+   echo 'ALVO_GOOGLE_CLIENT_ID=<id>.apps.googleusercontent.com' | sudo tee -a /etc/alvo/deploy.env
+   sudo sh -c 'umask 022; cat > /etc/alvo/secrets/alvo_google_client_secret'
+   ```
+   For the second command paste the secret, press Enter, then Ctrl+D. Do not put it on a command line or in chat.
+3. **Release and deploy** as usual. The API now has its own outbound network (`egress`), used only to reach Google.
+4. **Invite yourself as the first admin** (the invitation names the e-mail exactly as Google reports it, no Gmail-dot tricks):
+   ```
+   sudo docker compose -f /opt/alvo/compose.prod.yaml exec api python -m alvo.cli invite --email you@gmail.com --admin
+   ```
+   Then open the site, press *Sign in with Google*, and sign in. Further people: the same command without `--admin`, and add their address under *Test users* in Google Cloud. `revoke-invite --email ...` cancels an unused invitation. Invitations expire after 14 days (`--days` up to 90).
+5. **Check:** signing in works; a Google account that was not invited sees "has not been invited" and no account is created; `/api/v1/auth/me` returns your role after sign-in; signing out works.
 
 ### Rollback
 Images roll back by redeploying the previous release; the database is not rolled back (migrations are forward-only, written as expand-then-contract, and a restore from backup is the last resort).
@@ -173,7 +195,7 @@ On 2026-10-27 the real chain ran on the Pi: `backup.sh` from the systemd service
 
 ## Not done yet (do not tell anyone the system is production-ready)
 
-- **Real sign-in method.** In production nobody can sign in yet. Google sign-in with invitations is built (slice 1G-1, ADR 0010) but not switched on: it needs the Google OAuth client, an egress network for the API and the web button (slice 1G-2).
+- **Real sign-in method.** Google sign-in with invitations is wired in slice 1G-2 (ADR 0010) but **not proven against real Google** until the owner has created the OAuth client, deployed, and signed in once (section "Google sign-in").
 - **Proven on 2026-10-27:** a real release run, `gh attestation verify` for both images, the first deploy with `deploy.sh --first`, external checks (HTTPS with strict CSP, `/docs` and `/openapi.json` return 404, unauthenticated API call returns 401, HTTP redirects to HTTPS), and a real off-device backup plus restore (section 5). **Not yet proven:** a normal (non-first) deploy with its backup-freshness gate, `--rollback`, a reboot test that brings the stack back healthy without help, an external port scan, and low-disk and tunnel-down behaviour. HSTS is not enabled yet. The Pi's `gh` login token expires after 90 days: renew it before then, or deploys will refuse (attestation check).
 - **Rate limiting is built (slice 1F-3, ADR 0009) but untested on the Pi.** Check it after the next deploy: send more than 40 quick requests to `/api/v1/auth/me` from one machine and expect `429`. Cloudflare-side rate limiting and bot protection are optional extras set in the Cloudflare dashboard.
 - **Provider calls and spend control** (BudgetGuard): Phase 3.

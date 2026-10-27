@@ -17,6 +17,7 @@
 #
 # Settings (all optional):
 #   ALVO_PUBLIC_ORIGIN         https address of the site (or put it in /etc/alvo/deploy.env)
+#   ALVO_GOOGLE_CLIENT_ID      Google OAuth client id (required; also in /etc/alvo/deploy.env)
 #   ALVO_COMPOSE_FILE          default /opt/alvo/compose.prod.yaml
 #   ALVO_SECRETS_DIR           default /etc/alvo/secrets
 #   ALVO_DEPLOY_STATE_DIR      default /var/lib/alvo-deploy
@@ -77,6 +78,8 @@ grep -q '^ *"schema": 1,\{0,1\} *$' "$manifest" || fail "unsupported manifest sc
 
 : "${ALVO_PUBLIC_ORIGIN:?set ALVO_PUBLIC_ORIGIN (or /etc/alvo/deploy.env)}"
 export ALVO_PUBLIC_ORIGIN
+: "${ALVO_GOOGLE_CLIENT_ID:?set ALVO_GOOGLE_CLIENT_ID (or /etc/alvo/deploy.env)}"
+export ALVO_GOOGLE_CLIENT_ID
 export ALVO_API_DIGEST="$api_digest"
 export ALVO_WEB_DIGEST="$web_digest"
 compose="docker compose -f $compose_file"
@@ -90,7 +93,7 @@ fi
 
 # 2. Safe to proceed? (local checks first) --------------------------------------------------------------------
 [ -f "$compose_file" ] || fail "compose file not found" 2
-for secret in db_password alvo_database_url alvo_session_secret tunnel_token; do
+for secret in db_password alvo_database_url alvo_session_secret alvo_google_client_secret tunnel_token; do
   [ -s "$secrets_dir/$secret" ] || fail "secret file missing or empty: $secret"
 done
 

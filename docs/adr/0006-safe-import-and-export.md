@@ -24,4 +24,4 @@ Users will ask an AI to produce learning content as JSON and upload it, repeated
 ## Consequences
 - Manual creation in the content API shares the same uniqueness rule: the same type and prompt in one project is a `409 duplicate`, even if the first one is archived.
 - Migration `0005` back-fills fingerprints with a frozen copy of the rules; a test keeps that copy equal to the domain functions. A database that already holds duplicate items must be cleaned before upgrading.
-- Preview and the rate limit for previews rely on the body cap; a general request rate limiter is still to be added before public exposure (slice 1F).
+- Preview and the rate limit for previews rely on the body cap; the general request rate limiter was added in slice 1F-3 (ADR 0009).

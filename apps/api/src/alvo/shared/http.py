@@ -1,6 +1,7 @@
 """HTTP-level guards that apply to every route."""
 
 from datetime import datetime
+from ipaddress import ip_address
 
 from fastapi import Request
 from starlette.exceptions import HTTPException
@@ -11,6 +12,21 @@ def get_now(request: Request) -> datetime:
     """The application clock (injectable in tests)."""
     now: datetime = request.app.state.clock()
     return now
+
+
+def client_address(request: Request, *, trust_forwarded_for: bool) -> str:
+    """The caller's address for rate limiting.
+
+    `X-Forwarded-For` is honoured only when configured, because only our own nginx (which
+    overwrites it) may be trusted to set it. A malformed value falls back to the socket peer.
+    """
+    if trust_forwarded_for:
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+        try:
+            return str(ip_address(forwarded))
+        except ValueError:
+            pass
+    return request.client.host if request.client else "unknown"
 
 
 class PayloadTooLarge(HTTPException):

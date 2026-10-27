@@ -47,6 +47,8 @@ services:
       ALVO_PUBLIC_ORIGIN: http://localhost:8080
       # Development-only login; the app refuses to start with this value in production.
       ALVO_IDENTITY_PROVIDER: mock
+      # Only our nginx can reach the API and it overwrites X-Forwarded-For (ADR 0009).
+      ALVO_TRUST_FORWARDED_FOR: "true"
     secrets:
       - alvo_database_url
       - alvo_session_secret

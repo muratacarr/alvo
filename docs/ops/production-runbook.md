@@ -157,6 +157,6 @@ On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was
 
 - **Real sign-in method.** In production nobody can sign in (the development login is forbidden there). Decision D-1 is still open.
 - **The release workflow and the deploy script have never run for real.** Their logic is tested with stand-ins, and the workflow is linted, but the first real release, the attestation check (`gh attestation verify`), pulling from GHCR and the first start on the Pi are unverified until you do them (slice 1F-2 ships the tools, not the proof).
-- **General and sign-in rate limiting** at the edge and in the API: slice 1F-3.
+- **Rate limiting is built (slice 1F-3, ADR 0009) but untested on the Pi.** Check it after the next deploy: send more than 40 quick requests to `/api/v1/auth/me` from one machine and expect `429`. Cloudflare-side rate limiting and bot protection are optional extras set in the Cloudflare dashboard.
 - **Host facts** (D-6) and the first real start on the Pi, including an external port scan, reboot test, low-disk and tunnel-down behaviour.
 - **Provider calls and spend control** (BudgetGuard): Phase 3.

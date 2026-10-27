@@ -61,6 +61,8 @@ services:
       ALVO_PUBLIC_ORIGIN: ${ALVO_PUBLIC_ORIGIN:?set ALVO_PUBLIC_ORIGIN to the https address of the site}
       # No sign-in route exists until a real identity provider is added.
       ALVO_IDENTITY_PROVIDER: none
+      # Only our nginx can reach the API and it overwrites X-Forwarded-For (ADR 0009).
+      ALVO_TRUST_FORWARDED_FOR: "true"
     secrets:
       - alvo_database_url
       - alvo_session_secret

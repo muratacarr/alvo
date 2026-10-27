@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     max_import_bytes: int = 2_097_152
     # Import commits one user may run per hour (rate limit for an expensive operation).
     import_commits_per_hour: int = 30
+    # Requests one signed-in user may make per minute across the whole API.
+    user_requests_per_minute: int = 300
+    # Sign-in attempts one client address may make per minute (applies to /api/v1/auth POSTs).
+    auth_attempts_per_minute: int = 10
+    # Read the client address from X-Forwarded-For. Enable ONLY behind our own nginx, which
+    # overwrites that header; otherwise any client could spoof its address.
+    trust_forwarded_for: bool = False
     # Global ceilings for per-user AI limits an admin may grant. Zero means "grant nothing";
     # the owner raises them deliberately (see docs/security/api-spend-policy.md).
     ai_max_requests_per_day: int = 0
@@ -106,6 +113,8 @@ class Settings(BaseSettings):
             raise ValueError("max_import_bytes must be between max_request_bytes and 50 MiB")
         if self.import_commits_per_hour < 1:
             raise ValueError("import_commits_per_hour must be positive")
+        if self.user_requests_per_minute < 1 or self.auth_attempts_per_minute < 1:
+            raise ValueError("rate limits must be positive")
         if self.admin_recent_login_minutes <= 0:
             raise ValueError("admin_recent_login_minutes must be positive")
         if self.ai_max_requests_per_day < 0 or self.ai_max_monthly_units < 0:

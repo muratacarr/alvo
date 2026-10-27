@@ -102,3 +102,32 @@ def test_mime_types_file_is_not_nested_inside_a_types_block() -> None:
     # /etc/nginx/mime.types already contains its own `types { ... }`; nesting it breaks nginx.
     assert not re.search(r"types\s*\{[^}]*include\s+/etc/nginx/mime\.types", CONF)
     assert re.search(r"^\s*include\s+/etc/nginx/mime\.types;", CONF, re.MULTILINE)
+
+
+def test_the_api_is_rate_limited_per_client_with_a_json_429() -> None:
+    assert "limit_req_zone $binary_remote_addr zone=api_general" in CONF
+    assert "limit_req_status 429;" in CONF
+    assert 'return 429 \'{"error":"rate_limited"}\'' in CONF
+    for block in re.split(r"\n    location ", CONF)[1:]:
+        if block.startswith(("/api/ ", "/api/v1/auth/ ")):
+            assert "limit_req zone=api_general" in block, block.splitlines()[0]
+
+
+def test_unsafe_auth_requests_have_a_stricter_limit_than_the_rest() -> None:
+    auth = next(b for b in re.split(r"\n    location ", CONF) if b.startswith("/api/v1/auth/ "))
+    assert "limit_req zone=auth_write" in auth
+    assert re.search(r"zone=auth_write:\w+\s+rate=\d+r/m", CONF)
+    # Only POST is counted; reads (session checks) must not burn the sign-in allowance.
+    assert re.search(r'map \$request_method \$auth_write_key \{\s+default ""', CONF)
+
+
+def test_the_real_client_address_is_trusted_only_from_private_networks() -> None:
+    assert "real_ip_header CF-Connecting-IP;" in CONF
+    trusted = re.findall(r"set_real_ip_from\s+(\S+);", CONF)
+    assert trusted and "0.0.0.0/0" not in trusted
+    assert all(net.split("/")[0].startswith(("10.", "172.", "192.168.")) for net in trusted)
+
+
+def test_forwarded_for_is_overwritten_not_appended() -> None:
+    assert "$proxy_add_x_forwarded_for" not in CONF
+    assert CONF.count("proxy_set_header X-Forwarded-For $remote_addr;") >= 2

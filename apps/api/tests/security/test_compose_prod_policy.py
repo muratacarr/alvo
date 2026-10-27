@@ -130,3 +130,10 @@ def test_every_secret_a_service_uses_is_declared() -> None:
     declared = set(load()["secrets"])
     for name, svc in services().items():
         assert set(svc.get("secrets", [])) <= declared, name
+
+
+def test_the_api_trusts_forwarded_for_only_because_it_is_unreachable_except_through_nginx() -> None:
+    api = services()["api"]
+    assert api["environment"]["ALVO_TRUST_FORWARDED_FOR"] == "true"
+    assert "ports" not in api
+    assert not any(not load()["networks"][n].get("internal") for n in api["networks"])

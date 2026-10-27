@@ -17,5 +17,5 @@ Alvo is a same-origin PWA and API behind one host. It needs revocable logins, pr
 
 ## Consequences
 - No horizontal scaling concerns for sessions (PostgreSQL is shared), at the cost of one query per authenticated request.
-- Rate limiting of sign-in is deferred until a real provider exists (the mock route is unreachable in production).
+- Sign-in requests are rate limited per client address and signed-in users per minute (ADR 0009); the mock route is unreachable in production.
 - `Origin` is required, so non-browser API clients must send it.

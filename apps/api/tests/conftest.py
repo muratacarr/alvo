@@ -20,6 +20,10 @@ def settings_factory() -> SettingsFactory:
             "session_secret": secrets.token_urlsafe(48),
             "public_origin": "https://testserver",
             "identity_provider": "mock",
+            # Tests share one database and a frozen clock, so counters would leak between
+            # tests; the rate-limit tests set small limits explicitly.
+            "user_requests_per_minute": 1_000_000,
+            "auth_attempts_per_minute": 1_000_000,
         }
         values.update(overrides)
         return Settings(_env_file=None, **values)

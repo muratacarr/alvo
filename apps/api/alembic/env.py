@@ -8,6 +8,7 @@ import alvo.entitlements.infrastructure  # noqa: F401
 import alvo.identity.infrastructure  # noqa: F401
 import alvo.imports.infrastructure  # noqa: F401
 import alvo.projects.infrastructure  # noqa: F401
+import alvo.shared.ratelimit  # noqa: F401
 from alvo.shared.config import Settings
 from alvo.shared.orm import Base
 

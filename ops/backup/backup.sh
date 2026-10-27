@@ -58,7 +58,9 @@ fi
 
 # The stored copy is readable by the folder's group (the read-only pull user), never by others.
 # The unencrypted work area above stays private.
-( umask 027; rclone copyto "$file" "${ALVO_BACKUP_REMOTE%/}/$name" )
+# --no-check-dest: the name carries a UTC timestamp, so it is always new; skipping the "does it
+# exist" lookup avoids a needless request to the storage download host, which can time out.
+( umask 027; rclone copyto --no-check-dest "$file" "${ALVO_BACKUP_REMOTE%/}/$name" )
 
 if [ -n "$keep_days" ]; then
   rclone delete --min-age "${keep_days}d" --include "alvo-*.dump.age" "${ALVO_BACKUP_REMOTE%/}"

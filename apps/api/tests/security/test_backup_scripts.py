@@ -82,7 +82,7 @@ def test_a_good_backup_is_uploaded_once_with_a_timestamped_name(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     uploads = (tmp_path / "rclone.log").read_text(encoding="utf-8").splitlines()
     assert len(uploads) == 1
-    assert uploads[0].startswith("copyto ")
+    assert uploads[0].startswith("copyto --no-check-dest ")
     assert "remote:bucket/db/alvo-" in uploads[0]
     assert uploads[0].endswith(".dump.age")
     assert (tmp_path / "state" / "last-success").read_text(encoding="utf-8").strip().isdigit()

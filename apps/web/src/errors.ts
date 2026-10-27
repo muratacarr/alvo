@@ -35,7 +35,7 @@ const IMPORT_MESSAGES: Record<string, string> = {
   idempotency_key_reuse:
     "This import was already started with different settings. Choose the file again and retry.",
   archived: "This project is archived, so nothing can be imported.",
-  rate_limited: "Too many imports in a short time. Wait a minute and try again.",
+  rate_limited: "Too many imports or requests in a short time. Wait a minute and try again.",
 };
 
 /** User-facing wording for import failures. */

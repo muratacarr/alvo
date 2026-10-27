@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from alvo.main import create_app
@@ -46,8 +47,10 @@ def test_docs_explain_how_to_get_the_token(settings_factory: SettingsFactory) ->
 
 
 def test_documenting_the_header_does_not_weaken_enforcement(
-    settings_factory: SettingsFactory,
+    settings_factory: SettingsFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # This unit test has no database; the rate limiter (which needs one) is covered elsewhere.
+    monkeypatch.setattr("alvo.identity.api.enforce", lambda *args, **kwargs: None)
     app = create_app(settings_factory(environment="development"), readiness_probe=lambda: True)
     client = TestClient(app, base_url="https://testserver")
     response = client.post("/api/v1/auth/logout", headers={"Origin": "https://testserver"})

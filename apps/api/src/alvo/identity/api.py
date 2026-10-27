@@ -14,6 +14,8 @@ from alvo.identity.domain import Principal, VerifiedIdentity
 from alvo.identity.security import tokens_match
 from alvo.shared.config import Settings
 from alvo.shared.errors import ApiError
+from alvo.shared.http import client_address
+from alvo.shared.ratelimit import enforce
 
 COOKIE_NAME = "__Host-alvo_session"
 CSRF_HEADER = "X-CSRF-Token"
@@ -45,7 +47,18 @@ def require_session(
     session = service.authenticate(db, token) if token else None
     if session is None:
         raise ApiError(401, "unauthenticated")
+    settings: Settings = request.app.state.settings
+    enforce(request, f"user:{session.principal.user_id}", settings.user_requests_per_minute)
     return session
+
+
+def limit_auth_attempts(request: Request) -> None:
+    """Router-level guard: unsafe auth requests are limited per client address."""
+    if request.method in _SAFE_METHODS:
+        return
+    settings: Settings = request.app.state.settings
+    address = client_address(request, trust_forwarded_for=settings.trust_forwarded_for)
+    enforce(request, f"auth:{address}", settings.auth_attempts_per_minute)
 
 
 def principal_dependency(
@@ -115,7 +128,10 @@ def require_admin_change(
 
 
 def build_router(settings: Settings, service: IdentityService) -> APIRouter:
-    router = APIRouter(prefix="/api/v1/auth", dependencies=[Depends(verify_origin)])
+    router = APIRouter(
+        prefix="/api/v1/auth",
+        dependencies=[Depends(verify_origin), Depends(limit_auth_attempts)],
+    )
     max_age = settings.session_absolute_minutes * 60
 
     def set_session_cookie(response: Response, token: str) -> None:

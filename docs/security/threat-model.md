@@ -16,7 +16,7 @@ Browser <-> edge; edge <-> tunnel <-> origin; web <-> api; api <-> db; GitHub (p
 | T2 | Session theft / fixation / CSRF | Opaque hashed server sessions, `__Host-` cookie, rotation, Origin+token CSRF, no tokens in localStorage | XSS on same origin |
 | T3 | XSS via imported content | Render as text only, no raw HTML, strict CSP (no inline script), JSON Schema bounds | medium until e2e XSS tests exist |
 | T4 | Malicious/oversized import (resource exhaustion, nested JSON, duplicate keys) | Caps, streaming body limit, atomic transaction, timeouts, per-user rate limits | low |
-| T5 | Brute force / abuse of auth endpoints | Rate limits, provider-delegated auth (no passwords) | credential stuffing not applicable |
+| T5 | Brute force / abuse of auth endpoints | Rate limits at nginx and in the API (ADR 0009), provider-delegated auth (no passwords) | credential stuffing not applicable |
 | T6 | Injection | ORM parameters only, no dynamic SQL, ruff/bandit rules | low |
 | T7 | Secret leakage in public repo, history, CI logs, images | Gitleaks pre-commit + CI full-history, push protection, runtime placeholder rejection, no `ARG/ENV` secrets, image-layer scan | human error before scanner |
 | T8 | Supply chain (deps, actions, base images) | Lockfiles with hashes, Dependabot, SHA-pinned actions, digest-pinned base images, pip-audit/npm audit/Trivy, SBOM | zero-day |

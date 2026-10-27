@@ -35,6 +35,6 @@ Files follow the versioned contract in `import-schema-v1.json` (JSON Schema, dra
 
 Counts: `new_items`, `new_modules`, `new_topics`, `duplicate_external_id`, `duplicate_content`, `duplicate_in_file`, `ambiguous`, `invalid`.
 
-Import errors (`422` unless noted): `invalid_json`, `duplicate_key`, `too_deep`, `invalid_document`, `schema_version_missing`, `unsupported_schema_version` (with `supported`), `too_many_modules`, `too_many_topics`, `too_many_items`, `invalid_items` (with `count`; commit only). Also `413 payload_too_large`, `409 idempotency_key_reuse`, `409 archived`, `429 rate_limited`.
+Import errors (`422` unless noted): `invalid_json`, `duplicate_key`, `too_deep`, `invalid_document`, `schema_version_missing`, `unsupported_schema_version` (with `supported`), `too_many_modules`, `too_many_topics`, `too_many_items`, `invalid_items` (with `count`; commit only). Also `413 payload_too_large`, `409 idempotency_key_reuse`, `409 archived`, `429 rate_limited` (also returned by any route when a per-user or per-address limit is exceeded, see ADR 0009).
 
 Limits: body 2 MiB, 2000 items, 100 modules, 200 topics per module, 15 s of database time, 30 commits per user per hour (all configurable except the structural ones). Only additions are made: nothing that exists is changed, and archived items are never restored.

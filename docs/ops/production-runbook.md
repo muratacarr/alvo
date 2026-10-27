@@ -101,16 +101,35 @@ Then take the first backup right away (section 5) and run the restore drill. Fro
 
 ## 5. Backups
 
-**Design (decision D-4, 2026-10-27): the backup copy goes to a computer at home, and that computer pulls it.**
+**Design (decision D-4, 2026-10-27): the backup copy goes to Backblaze B2 (bucket `alvo-storage`, private, server-side encryption on).**
 
-- `backup.sh` runs `pg_dump`, encrypts it with the **public** age key and stores the file in `/var/backups/alvo` on the Pi (kept for 14 days). The Pi never holds the private key, so someone who steals the Pi or the files cannot read the backups.
-- Your home computer then **pulls** the files from the Pi with a read-only SSH key. The Pi has no key, password or address for the home computer, so a compromised Pi cannot reach it. The computer uses `copy`, never `sync`, so deleting files on the Pi cannot delete the copies.
-- Trade-off you accepted: both machines are in the same home. Fire, theft or a power surge can take both. If that matters later, add cloud storage as a second destination (`ALVO_BACKUP_REMOTE` accepts any rclone remote); nothing else changes.
+- `backup.sh` runs `pg_dump`, encrypts it with the **public** age key and uploads the file with rclone. The Pi never holds the private key, so someone who steals the Pi, the bucket or the files cannot read the backups.
+- The Pi's B2 application key is **Write Only** and limited to bucket `alvo-storage` and the file prefix `db/`. It cannot list, read or delete files, so a compromised Pi cannot destroy or read the stored backups. Because it cannot read, **restoring means downloading the file in the B2 web console** (or with a separate read key that you create only when needed).
+- Retention is a B2 lifecycle rule, not a script: file path `db/`, days till hide 35, days till delete 1. `ALVO_BACKUP_KEEP_DAYS` stays unset for B2 (it is for local folders).
+- Home-computer pull (a read-only SSH user that copies the Pi's local folder) was designed first and is kept below as an **optional second destination**; it is not set up.
 
 One-time setup:
 
 1. **Key pair for encryption (on your own computer, not on the Pi).** Windows: `winget install FiloSottile.age`, then `age-keygen -o alvo-backup.key`. Keep this file offline (password manager and a second offline copy). Losing it means losing every backup. Copy only the printed public key (`age1...`) to the Pi.
-2. **Backup folder and read-only user on the Pi (as root).** A dedicated group may read the files; nobody else can.
+2. **Backblaze B2 (primary destination).** Create a private bucket with encryption on and the lifecycle rule above. Create an application key: name `alvo-pi-yedek`, bucket `alvo-storage`, type **Write Only**, file name prefix `db/`, no "list all bucket names". (The web form offers only Read and Write, Read Only and Write Only; Read and Write includes delete, so do not use it for the Pi.) Then on the Pi, entering the key ID and key only in the terminal, never in chat or a file you commit:
+   ```
+   sudo rclone config                      # new remote "alvo-b2", type b2
+   sudo install -m 600 -o root -g root /root/.config/rclone/rclone.conf /etc/alvo/rclone.conf
+   ```
+   The service runs with `ProtectHome=yes` and cannot see `/root`, so the rclone settings must live in `/etc/alvo/rclone.conf` (root only) and be named in `backup.env` with `RCLONE_CONFIG`. Keep the key ID and key in your password manager; rotate them if they were ever exposed.
+   Settings in `/etc/alvo/backup.env` (no secrets in this file):
+   ```
+   ALVO_BACKUP_AGE_RECIPIENT=age1...
+   ALVO_BACKUP_REMOTE=alvo-b2:alvo-storage/db
+   RCLONE_CONFIG=/etc/alvo/rclone.conf
+   RCLONE_LOW_LEVEL_RETRIES=2
+   RCLONE_CONTIMEOUT=10s
+   RCLONE_TIMEOUT=60s
+   RCLONE_VERBOSE=1
+   ```
+   From the home network, `f003.backblazeb2.com` (the download host) timed out in the TLS handshake while the API host answered quickly. rclone looks the target name up there before uploading, which made `copyto` fail. `backup.sh` therefore uses `--no-check-dest` (names carry a UTC timestamp and are always new), and the short timeouts above keep a bad network from hanging the service for minutes. A backup took about 13 seconds afterwards.
+
+   *Optional second destination (not set up): a read-only user for a home computer to pull from the Pi's local folder (`ALVO_BACKUP_REMOTE=/var/backups/alvo` and `ALVO_BACKUP_KEEP_DAYS=14` would then be used instead). The rest of this step, step 3 and step 5 are only for that:*
    ```
    sudo groupadd --system alvo-backup
    sudo useradd --system --create-home --shell /usr/sbin/nologin --gid alvo-backup alvo-backup-reader
@@ -119,12 +138,8 @@ One-time setup:
    ```
    New backups are written with mode 640 (owner root, group `alvo-backup`). Files created before this change (mode 600) need `sudo chgrp alvo-backup /var/backups/alvo/*.age && sudo chmod 640 /var/backups/alvo/*.age` once.
 3. **Read-only SSH key for the home computer.** Generate a key pair on the home computer (`ssh-keygen -t ed25519 -f alvo-backup-pull`), and put the public half in `/home/alvo-backup-reader/.ssh/authorized_keys` on the Pi with the options `restrict` in front of it (no shell, no forwarding). The reader user can only read the folder above, because of the file permissions.
-4. **Schedule on the Pi (systemd timer, every 6 hours at 02, 08, 14 and 20 o'clock).** The settings file holds only the PUBLIC key and a folder, no secrets:
+4. **Schedule on the Pi (systemd timer, every 6 hours at 02, 08, 14 and 20 o'clock).** The settings file `/etc/alvo/backup.env` (step 2) holds only the PUBLIC key, the destination and rclone options, no secrets. Create it with `sudo` and an editor, mode 644:
    ```
-   sudo sh -c 'umask 022; printf "ALVO_BACKUP_AGE_RECIPIENT=age1...
-ALVO_BACKUP_REMOTE=/var/backups/alvo
-ALVO_BACKUP_KEEP_DAYS=14
-" > /etc/alvo/backup.env'
    sudo cp /opt/alvo/ops/systemd/alvo-backup.service /opt/alvo/ops/systemd/alvo-backup.timer /etc/systemd/system/
    sudo systemctl daemon-reload
    sudo systemctl start alvo-backup.service        # take the first backup now
@@ -140,7 +155,8 @@ The script refuses a suspiciously small dump, uploads nothing on failure, prunes
 **Restore drill (do it before launch, then every quarter).** Never practise on production. Use a scratch stack, for example the development stack on your computer:
 
 ```
-# copy one backup file from your pulled folder, then:
+# download one backup in the B2 web console (Browse Files, db/), start the dev database
+# (docker compose up -d db), then in Git Bash:
 ALVO_BACKUP_AGE_IDENTITY=/path/to/alvo-backup.key \
   ops/backup/restore-drill.sh alvo-20260101T020000Z.dump.age
 ```
@@ -151,12 +167,13 @@ Targets: RPO 6 hours on the microSD card (24 hours once the database is on an SS
 
 ### What was verified, and how
 
-On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was run against the development database: the encrypted file started with the age header and contained no plaintext, the drill restored 10 tables at schema version 0005, a wrong key failed cleanly, and the live database was untouched. The copy to the backup folder was done by a stand-in for `rclone`, so **real rclone (local folder, pruning with `--min-age`/`--include`, and the SFTP pull from the home computer) has not been tested**. Do that during the first setup.
+On 2026-10-26 the real chain (real `pg_dump`, real `age`, real `pg_restore`) was run against the development database: the encrypted file started with the age header and contained no plaintext, the drill restored 10 tables at schema version 0005, a wrong key failed cleanly, and the live database was untouched. That first run used a stand-in for `rclone`.
+
+On 2026-10-27 the real chain ran on the Pi: `backup.sh` from the systemd service uploaded an encrypted dump (23 399 bytes) to B2 with the Write Only key; the file was downloaded in the B2 web console and restored on the owner's computer with the private key (`restore drill ok: 10 tables, schema version 0005`, scratch database dropped, live database untouched). The data was nearly empty (nobody can sign in yet), so repeat the drill once real data exists. Not tested: B2 lifecycle deletion (it acts after 35 days), the home-computer pull (not set up), and the private key's offline copies (the owner must confirm the password manager and USB copies open).
 
 ## Not done yet (do not tell anyone the system is production-ready)
 
 - **Real sign-in method.** In production nobody can sign in (the development login is forbidden there). Decision D-1 is still open.
-- **The release workflow and the deploy script have never run for real.** Their logic is tested with stand-ins, and the workflow is linted, but the first real release, the attestation check (`gh attestation verify`), pulling from GHCR and the first start on the Pi are unverified until you do them (slice 1F-2 ships the tools, not the proof).
+- **Proven on 2026-10-27:** a real release run, `gh attestation verify` for both images, the first deploy with `deploy.sh --first`, external checks (HTTPS with strict CSP, `/docs` and `/openapi.json` return 404, unauthenticated API call returns 401, HTTP redirects to HTTPS), and a real off-device backup plus restore (section 5). **Not yet proven:** a normal (non-first) deploy with its backup-freshness gate, `--rollback`, a reboot test that brings the stack back healthy without help, an external port scan, and low-disk and tunnel-down behaviour. HSTS is not enabled yet. The Pi's `gh` login token expires after 90 days: renew it before then, or deploys will refuse (attestation check).
 - **General and sign-in rate limiting** at the edge and in the API: slice 1F-3.
-- **Host facts** (D-6) and the first real start on the Pi, including an external port scan, reboot test, low-disk and tunnel-down behaviour.
 - **Provider calls and spend control** (BudgetGuard): Phase 3.

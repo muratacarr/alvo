@@ -1,6 +1,6 @@
 # Base images are pinned by multi-arch digest (linux/amd64 and linux/arm64 verified).
 # Update digests deliberately via a reviewed PR; never use mutable tags.
-FROM node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS build
+FROM node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc AS build
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
 # Exact lockfile, no install scripts (see .npmrc).
